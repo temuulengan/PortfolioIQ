@@ -2,10 +2,10 @@ import React, { createContext, useState, useEffect } from 'react';
 import { 
   loginUser, 
   registerUser, 
-  logoutUser, 
+  signOut, 
   getCurrentUser,
-  resetUserPassword 
-} from '../services/firebase';
+  resetPassword as resetUserPassword 
+} from '../../services/firebase/firebase';
 
 export const AuthContext = createContext();
 
@@ -51,7 +51,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      await logoutUser();
+      await signOut();
       setUser(null);
       return { success: true };
     } catch (error) {

@@ -9,9 +9,9 @@ import {
   Timestamp,
   limit,
 } from 'firebase/firestore';
-import { db, getCurrentUser } from './firebase';
-import { getHistoricalPrices } from './stockAPI';
-import { calculatePortfolioValue } from './calculations';
+import { db, getCurrentUser } from '../firebase/firebase';
+import { getHistoricalPrices } from '../api/stockAPI';
+import { calculatePortfolioValue } from '../../shared/calculations';
 
 /**
  * Create a daily snapshot of portfolio value

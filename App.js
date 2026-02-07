@@ -6,7 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './src/context/AuthContext';
 import { PortfolioProvider } from './src/context/PortfolioContext';
 import AppNavigator from './src/navigation/AppNavigator';
-import { theme } from './src/utils/theme';
+import { theme } from './shared/theme';
 
 // Ignore VirtualizedList warning
 LogBox.ignoreLogs(['VirtualizedLists should never be nested']);

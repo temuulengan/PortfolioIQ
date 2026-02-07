@@ -6,8 +6,8 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Card, Text, ActivityIndicator, Button, Chip } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { generatePortfolioInsights, getRebalancingRecommendations } from '../services/aiService';
-import { COLORS } from '../utils/colors';
+import { generatePortfolioInsights, getRebalancingRecommendations } from '../../services/ai/aiService';
+import { COLORS } from '../../shared/colors';
 
 const AIInsights = ({ holdings, portfolioValue, totalGainLoss }) => {
   const [insights, setInsights] = useState(null);

@@ -9,9 +9,9 @@ import {
   calculateConcentrationRisk,
   calculateDiversificationScore,
   isDiversified,
-} from '../services/calculations';
-import { RISK_THRESHOLDS, DIVERSIFICATION } from '../utils/constants';
-import { COLORS, getRiskLevelColor } from '../utils/colors';
+} from '../../shared/calculations';
+import { RISK_THRESHOLDS, DIVERSIFICATION } from '../../shared/constants';
+import { COLORS, getRiskLevelColor } from '../../shared/colors';
 
 const RiskScreen = () => {
   const { holdings, selectedPortfolio } = useContext(PortfolioContext);

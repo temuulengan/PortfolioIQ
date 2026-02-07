@@ -2,13 +2,13 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Card, Title, Paragraph, Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { formatCurrency, formatPercent } from '../utils/helpers';
+import { formatCurrency, formatPercent } from '../../shared/helpers';
 import { 
   calculatePortfolioValue,
   calculatePortfolioCostBasis,
   calculatePortfolioGainLoss,
   calculatePortfolioGainLossPercent 
-} from '../services/calculations';
+} from '../../shared/calculations';
 
 const PortfolioCard = ({ portfolio, holdings = [], onPress }) => {
   const totalValue = calculatePortfolioValue(holdings);

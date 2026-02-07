@@ -2,13 +2,13 @@ import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Card, Title, Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { formatCurrency, formatPercent, formatRelativeTime } from '../utils/helpers';
+import { formatCurrency, formatPercent, formatRelativeTime } from '../../shared/helpers';
 import {
   calculateHoldingValue,
   calculateCostBasis,
   calculateGainLoss,
   calculateGainLossPercent,
-} from '../services/calculations';
+} from '../../shared/calculations';
 
 const HoldingCard = ({ holding, onPress, onLongPress }) => {
   const currentValue = calculateHoldingValue(holding.quantity, holding.currentPrice);

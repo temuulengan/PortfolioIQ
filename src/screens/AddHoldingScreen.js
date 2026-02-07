@@ -18,9 +18,9 @@ import {
 } from 'react-native-paper';
 import StockSearchBar from '../components/StockSearchBar';
 import { PortfolioContext } from '../context/PortfolioContext';
-import { COLORS } from '../utils/colors';
-import { isPositiveNumber, isValidPurchaseDate } from '../utils/helpers';
-import { ASSET_TYPES, ASSET_TYPE_LABELS } from '../utils/constants';
+import { COLORS } from '../../shared/colors';
+import { isPositiveNumber, isValidPurchaseDate } from '../../shared/helpers';
+import { ASSET_TYPES, ASSET_TYPE_LABELS } from '../../shared/constants';
 
 const AddHoldingScreen = ({ navigation }) => {
   const { addNewHolding, selectedPortfolio } = useContext(PortfolioContext);

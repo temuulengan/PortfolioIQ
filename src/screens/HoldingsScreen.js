@@ -18,8 +18,8 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { PortfolioContext } from '../context/PortfolioContext';
 import HoldingCard from '../components/HoldingCard';
-import { sortBy } from '../utils/helpers';
-import { COLORS } from '../utils/colors';
+import { sortBy } from '../../shared/helpers';
+import { COLORS } from '../../shared/colors';
 
 const HoldingsScreen = ({ navigation }) => {
   const {

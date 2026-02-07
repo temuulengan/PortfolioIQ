@@ -17,7 +17,7 @@ import {
   Snackbar,
 } from 'react-native-paper';
 import { AuthContext } from '../context/AuthContext';
-import { isValidEmail, isValidPassword, getErrorMessage } from '../utils/helpers';
+import { isValidEmail, isValidPassword, getErrorMessage } from '../../shared/helpers';
 
 const AuthScreen = () => {
   const { login, register, resetPassword } = useContext(AuthContext);

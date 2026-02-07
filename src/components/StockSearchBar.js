@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { Searchbar, List, Text, ActivityIndicator } from 'react-native-paper';
-import { searchStocks } from '../services/stockAPI';
-import { debounce } from '../utils/helpers';
+import { searchStocks } from '../../services/api/stockAPI';
+import { debounce } from '../../shared/helpers';
 
 const StockSearchBar = ({ onSelectStock, placeholder = 'Search stocks...' }) => {
   const [searchQuery, setSearchQuery] = useState('');

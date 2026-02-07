@@ -5,7 +5,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LineChart, PieChart } from 'react-native-chart-kit';
 import { PortfolioContext } from '../context/PortfolioContext';
 import { AuthContext } from '../context/AuthContext';
-import { formatCurrency, formatPercent } from '../utils/helpers';
+import { formatCurrency, formatPercent } from '../../shared/helpers';
 import {
   calculatePortfolioValue,
   calculateAllocation,
@@ -13,10 +13,10 @@ import {
   calculateGainLossPercent,
   getTopPerformers,
   getBottomPerformers,
-} from '../services/calculations';
-import { getPortfolioHistory, generateHistoricalData } from '../services/historyService';
-import { CHART_COLORS } from '../utils/constants';
-import { COLORS, getGainLossColor } from '../utils/colors';
+} from '../../shared/calculations';
+import { getPortfolioHistory, generateHistoricalData } from '../../services/history/historyService';
+import { CHART_COLORS } from '../../shared/constants';
+import { COLORS, getGainLossColor } from '../../shared/colors';
 
 const AnalyticsScreen = () => {
   const { holdings, selectedPortfolio } = useContext(PortfolioContext);

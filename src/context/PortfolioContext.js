@@ -9,8 +9,8 @@ import {
   addHolding,
   updateHolding,
   deleteHolding,
-} from '../services/firebase';
-import { getStockPrice, getMultipleStockPrices } from '../services/stockAPI';
+} from '../../services/firebase/firebase';
+import { getStockPrice, getMultipleStockPrices } from '../../services/api/stockAPI';
 
 export const PortfolioContext = createContext();
 

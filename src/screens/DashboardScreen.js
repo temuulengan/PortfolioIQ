@@ -19,8 +19,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { PortfolioContext } from '../context/PortfolioContext';
 import { AuthContext } from '../context/AuthContext';
 import AIInsights from '../components/AIInsights';
-import { formatCurrency, formatPercent } from '../utils/helpers';
-import { COLORS, getGainLossColor } from '../utils/colors';
+import { formatCurrency, formatPercent } from '../../shared/helpers';
+import { COLORS, getGainLossColor } from '../../shared/colors';
 import {
   calculatePortfolioValue,
   calculatePortfolioCostBasis,
@@ -29,7 +29,7 @@ import {
   calculateGainLossPercent,
   calculateAllocation,
   getTopPerformers,
-} from '../services/calculations';
+} from '../../shared/calculations';
 
 const DashboardScreen = ({ navigation }) => {
   const { user } = useContext(AuthContext);

@@ -28,7 +28,7 @@ import {
 } from 'firebase/firestore';
 
 // Import Firebase configuration
-import { firebaseConfig } from '../config/firebase-config';
+import { firebaseConfig } from './firebase-config';
 
 // Initialize Firebase (only once)
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];

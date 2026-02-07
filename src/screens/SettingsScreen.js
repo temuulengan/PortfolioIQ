@@ -18,7 +18,7 @@ import {
   Text,
   Title,
 } from 'react-native-paper';
-import { COLORS } from '../utils/colors';
+import { COLORS } from '../../shared/colors';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { AuthContext } from '../context/AuthContext';
 import { PortfolioContext } from '../context/PortfolioContext';

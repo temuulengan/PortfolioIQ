@@ -6,6 +6,7 @@ import {
   RefreshControl,
   TouchableOpacity,
   Alert,
+  Animated,
 } from 'react-native';
 import {
   Text,
@@ -16,6 +17,7 @@ import {
   Chip,
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Swipeable } from 'react-native-gesture-handler';
 import { PortfolioContext } from '../context/PortfolioContext';
 import HoldingCard from '../components/HoldingCard';
 import { sortBy } from '../../shared/helpers';
@@ -40,10 +42,10 @@ const HoldingsScreen = ({ navigation }) => {
     await refreshPrices();
   };
 
-  const handleDeleteHolding = (holdingId, symbol) => {
+  const handleDeleteHolding = (holdingId, symbol, name) => {
     Alert.alert(
       'Delete Holding',
-      `Are you sure you want to delete ${symbol}?`,
+      `Delete ${symbol}?\n\nThis will permanently remove ${name} from your portfolio. This action cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -57,6 +59,28 @@ const HoldingsScreen = ({ navigation }) => {
           },
         },
       ]
+    );
+  };
+
+  const renderRightActions = (progress, dragX, item) => {
+    const scale = dragX.interpolate({
+      inputRange: [-100, 0],
+      outputRange: [1, 0],
+      extrapolate: 'clamp',
+    });
+
+    return (
+      <View style={styles.swipeActionsContainer}>
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={() => handleDeleteHolding(item.id, item.symbol, item.name)}
+        >
+          <Animated.View style={[{ transform: [{ scale }] }]}>
+            <MaterialCommunityIcons name="delete" size={24} color="#FFF" />
+            <Text style={styles.deleteButtonText}>Delete</Text>
+          </Animated.View>
+        </TouchableOpacity>
+      </View>
     );
   };
 
@@ -172,13 +196,18 @@ const HoldingsScreen = ({ navigation }) => {
       <FlatList
         data={sortedHoldings}
         renderItem={({ item }) => (
-          <HoldingCard
-            holding={item}
-            onPress={() => {
-              // Navigate to holding details (not implemented)
-            }}
-            onLongPress={() => handleDeleteHolding(item.id, item.symbol)}
-          />
+          <Swipeable
+            renderRightActions={(progress, dragX) => renderRightActions(progress, dragX, item)}
+            overshootRight={false}
+            friction={2}
+          >
+            <HoldingCard
+              holding={item}
+              onPress={() => {
+                // Navigate to holding details (not implemented)
+              }}
+            />
+          </Swipeable>
         )}
         keyExtractor={(item) => item.id}
         ListHeaderComponent={renderHeader}
@@ -259,6 +288,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: COLORS.primary,
+  },
+  swipeActionsContainer: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  deleteButton: {
+    backgroundColor: '#E53935',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    marginVertical: 8,
+    marginRight: 16,
+    borderRadius: 8,
+  },
+  deleteButtonText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
   },
   listContent: {
     paddingTop: 8,

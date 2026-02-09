@@ -1,5 +1,6 @@
 import Groq from 'groq-sdk';
 import { GROQ_API_KEY } from '@env';
+import { createNotification, NOTIFICATION_TYPES } from '../notifications/notificationService';
 
 // Initialize Groq client
 const groq = new Groq({
@@ -58,7 +59,17 @@ Keep it professional, clear, and actionable.`;
       max_tokens: 300,
     });
 
-    return completion.choices[0]?.message?.content || 'Unable to generate insights at this time.';
+    const insights = completion.choices[0]?.message?.content || 'Unable to generate insights at this time.';
+    
+    // Create notification for new AI insights
+    await createNotification({
+      type: NOTIFICATION_TYPES.INSIGHT,
+      title: 'New AI Insights Available',
+      message: insights.substring(0, 100) + (insights.length > 100 ? '...' : ''),
+      data: { fullInsights: insights },
+    });
+    
+    return insights;
   } catch (error) {
     console.error('Error generating AI insights:', error);
     if (error.message?.includes('API key')) {

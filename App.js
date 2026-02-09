@@ -5,6 +5,7 @@ import { Provider as PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './src/context/AuthContext';
 import { PortfolioProvider } from './src/context/PortfolioContext';
+import { NotificationProvider } from './src/context/NotificationContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import { theme } from './shared/theme';
 
@@ -17,8 +18,10 @@ export default function App() {
       <PaperProvider theme={theme}>
         <AuthProvider>
           <PortfolioProvider>
-            <StatusBar style="auto" />
-            <AppNavigator />
+            <NotificationProvider>
+              <StatusBar style="auto" />
+              <AppNavigator />
+            </NotificationProvider>
           </PortfolioProvider>
         </AuthProvider>
       </PaperProvider>

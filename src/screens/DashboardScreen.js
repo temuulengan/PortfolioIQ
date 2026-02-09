@@ -14,10 +14,12 @@ import {
   Surface,
   ActivityIndicator,
   Chip,
+  Badge,
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { PortfolioContext } from '../context/PortfolioContext';
 import { AuthContext } from '../context/AuthContext';
+import { NotificationContext } from '../context/NotificationContext';
 import AIInsights from '../components/AIInsights';
 import { formatCurrency, formatPercent } from '../../shared/helpers';
 import { COLORS, getGainLossColor } from '../../shared/colors';
@@ -30,6 +32,7 @@ import {
   calculateAllocation,
   getTopPerformers,
 } from '../../shared/calculations';
+import { checkMilestones } from '../../services/notifications/notificationService';
 
 const DashboardScreen = ({ navigation }) => {
   const { user } = useContext(AuthContext);
@@ -42,16 +45,27 @@ const DashboardScreen = ({ navigation }) => {
     loadPortfolios,
     refreshPrices,
   } = useContext(PortfolioContext);
+  const { unreadCount } = useContext(NotificationContext);
+  const [previousValue, setPreviousValue] = React.useState(null);
 
   useEffect(() => {
     loadPortfolios();
   }, []);
+  
+  // Check for milestones when total value changes
+  const totalValue = calculatePortfolioValue(holdings);
+  
+  useEffect(() => {
+    if (totalValue > 0 && previousValue !== null && previousValue !== totalValue) {
+      checkMilestones(totalValue, previousValue);
+    }
+    setPreviousValue(totalValue);
+  }, [totalValue]);
 
   const handleRefresh = async () => {
     await Promise.all([loadPortfolios(), refreshPrices()]);
   };
 
-  const totalValue = calculatePortfolioValue(holdings);
   const costBasis = calculatePortfolioCostBasis(holdings);
   const gainLoss = calculatePortfolioGainLoss(holdings);
   const gainLossPercent = holdings.length > 0 ? calculatePortfolioGainLossPercent(holdings) : 0;
@@ -82,8 +96,15 @@ const DashboardScreen = ({ navigation }) => {
             <Text style={styles.greeting}>Hello, {user?.displayName || 'Investor'}!</Text>
             <Title style={styles.headerTitle}>Your Portfolio</Title>
           </View>
-          <TouchableOpacity>
-            <MaterialCommunityIcons name="bell-outline" size={24} color={COLORS.textPrimary} />
+          <TouchableOpacity onPress={() => navigation.navigate('Notifications')}>
+            <View>
+              <MaterialCommunityIcons name="bell-outline" size={24} color={COLORS.textPrimary} />
+              {unreadCount > 0 && (
+                <Badge style={styles.notificationBadge} size={18}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </Badge>
+              )}
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -235,10 +256,10 @@ const DashboardScreen = ({ navigation }) => {
 
               <TouchableOpacity
                 style={styles.actionButton}
-                onPress={() => navigation.navigate('Risk')}
+                onPress={() => navigation.navigate('Portfolios')}
               >
-                <MaterialCommunityIcons name="shield-check" size={32} color={COLORS.primary} />
-                <Text style={styles.actionText}>Risk</Text>
+                <MaterialCommunityIcons name="briefcase-multiple" size={32} color={COLORS.primary} />
+                <Text style={styles.actionText}>Portfolios</Text>
               </TouchableOpacity>
             </View>
           </>
@@ -480,6 +501,12 @@ const styles = StyleSheet.create({
     right: 16,
     bottom: 16,
     backgroundColor: COLORS.primary,
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: COLORS.error,
   },
 });
 

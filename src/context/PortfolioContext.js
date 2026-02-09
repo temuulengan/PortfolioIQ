@@ -11,6 +11,7 @@ import {
   deleteHolding,
 } from '../../services/firebase/firebase';
 import { getStockPrice, getMultipleStockPrices } from '../../services/api/stockAPI';
+import { checkPriceAlerts, createNotification, NOTIFICATION_TYPES } from '../../services/notifications/notificationService';
 
 export const PortfolioContext = createContext();
 
@@ -129,6 +130,15 @@ export const PortfolioProvider = ({ children }) => {
       });
 
       setHoldings([...holdings, newHolding]);
+      
+      // Create notification for new holding
+      await createNotification({
+        type: NOTIFICATION_TYPES.HOLDING_ADDED,
+        title: 'New Holding Added',
+        message: `${holdingData.symbol}: ${holdingData.quantity} shares at $${currentPrice.toFixed(2)}`,
+        data: { holdingId: newHolding.id, symbol: holdingData.symbol },
+      });
+      
       return { success: true, holding: newHolding };
     } catch (error) {
       return { success: false, error: error.message };
@@ -182,6 +192,10 @@ export const PortfolioProvider = ({ children }) => {
 
       const updatedHoldings = await Promise.all(updatePromises);
       setHoldings(updatedHoldings);
+      
+      // Check for price alerts after updating
+      await checkPriceAlerts(updatedHoldings);
+      
       return { success: true };
     } catch (error) {
       console.error('Error refreshing prices:', error);

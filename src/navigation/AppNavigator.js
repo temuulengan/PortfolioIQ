@@ -10,6 +10,8 @@ import AuthScreen from '../screens/AuthScreen';
 import DashboardScreen from '../screens/DashboardScreen';
 import HoldingsScreen from '../screens/HoldingsScreen';
 import AddHoldingScreen from '../screens/AddHoldingScreen';
+import PortfoliosScreen from '../screens/PortfoliosScreen';
+import NotificationsScreen from '../screens/NotificationsScreen';
 import AnalyticsScreen from '../screens/AnalyticsScreen';
 import RiskScreen from '../screens/RiskScreen';
 import SettingsScreen from '../screens/SettingsScreen';
@@ -28,10 +30,10 @@ const MainTabs = () => {
             iconName = focused ? 'view-dashboard' : 'view-dashboard-outline';
           } else if (route.name === 'Holdings') {
             iconName = focused ? 'briefcase' : 'briefcase-outline';
+          } else if (route.name === 'Portfolios') {
+            iconName = focused ? 'folder-multiple' : 'folder-multiple-outline';
           } else if (route.name === 'Analytics') {
             iconName = focused ? 'chart-line' : 'chart-line-variant';
-          } else if (route.name === 'Risk') {
-            iconName = focused ? 'shield-check' : 'shield-check-outline';
           } else if (route.name === 'Settings') {
             iconName = focused ? 'cog' : 'cog-outline';
           }
@@ -45,8 +47,8 @@ const MainTabs = () => {
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
       <Tab.Screen name="Holdings" component={HoldingsScreen} />
+      <Tab.Screen name="Portfolios" component={PortfoliosScreen} />
       <Tab.Screen name="Analytics" component={AnalyticsScreen} />
-      <Tab.Screen name="Risk" component={RiskScreen} />
       <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
   );
@@ -74,6 +76,14 @@ const AppNavigator = () => {
                 headerShown: true,
                 title: 'Add Holding',
                 presentation: 'modal'
+              }}
+            />
+            <Stack.Screen 
+              name="Notifications" 
+              component={NotificationsScreen}
+              options={{
+                headerShown: false,
+                presentation: 'card'
               }}
             />
           </>

@@ -1,6 +1,6 @@
-import React, { useContext } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { Text, Card, Title, Surface, ProgressBar, Chip } from 'react-native-paper';
+import { Text, Card, Title, Surface, ProgressBar, Chip, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { PortfolioContext } from '../context/PortfolioContext';
 import {
@@ -10,11 +10,46 @@ import {
   calculateDiversificationScore,
   isDiversified,
 } from '../../shared/calculations';
+import { runBridgewaterAnalysis } from '../../shared/bridgewaterAnalysis';
 import { RISK_THRESHOLDS, DIVERSIFICATION } from '../../shared/constants';
 import { COLORS, getRiskLevelColor } from '../../shared/colors';
 
 const RiskScreen = () => {
   const { holdings, selectedPortfolio } = useContext(PortfolioContext);
+  const [bridgewaterResult, setBridgewaterResult] = useState(null);
+  const [bridgewaterLoading, setBridgewaterLoading] = useState(false);
+  const [bridgewaterError, setBridgewaterError] = useState(null);
+
+  useEffect(() => {
+    const analyzeBridgewater = async () => {
+      if (!selectedPortfolio || holdings.length < 2) {
+        setBridgewaterResult(null);
+        setBridgewaterError('Need at least 2 holdings for Bridgewater risk-parity analysis');
+        return;
+      }
+
+      try {
+        setBridgewaterLoading(true);
+        setBridgewaterError(null);
+
+        const result = await runBridgewaterAnalysis(holdings, { lookbackDays: 252 });
+        if (!result.success) {
+          setBridgewaterResult(null);
+          setBridgewaterError(result.reason || 'Bridgewater analysis could not be completed');
+          return;
+        }
+
+        setBridgewaterResult(result);
+      } catch (error) {
+        setBridgewaterResult(null);
+        setBridgewaterError(error.message || 'Failed to run Bridgewater analysis');
+      } finally {
+        setBridgewaterLoading(false);
+      }
+    };
+
+    analyzeBridgewater();
+  }, [selectedPortfolio?.id, holdings]);
 
   if (!selectedPortfolio || holdings.length === 0) {
     return (
@@ -88,6 +123,77 @@ const RiskScreen = () => {
             : 'Consider adding more holdings or rebalancing to improve diversification.'}
         </Text>
       </Surface>
+
+      <Card style={styles.card}>
+        <Card.Content>
+          <View style={styles.metricTitle}>
+            <MaterialCommunityIcons name="scale-balance" size={24} color={COLORS.primary} />
+            <Title style={styles.cardTitle}>Bridgewater Local Model</Title>
+          </View>
+
+          {bridgewaterLoading ? (
+            <View style={styles.bridgewaterLoadingContainer}>
+              <ActivityIndicator size="small" color={COLORS.primary} />
+              <Text style={styles.bridgewaterHint}>Running risk-parity covariance model...</Text>
+            </View>
+          ) : bridgewaterError ? (
+            <Text style={styles.bridgewaterError}>{bridgewaterError}</Text>
+          ) : bridgewaterResult ? (
+            <>
+              <Text style={styles.bridgewaterHint}>Method: {bridgewaterResult.method}</Text>
+              <Text style={styles.bridgewaterHint}>
+                Lookback Window: {bridgewaterResult.lookbackDays} trading days
+              </Text>
+
+              <Surface style={styles.bridgewaterGrid}>
+                <View style={styles.bridgewaterGridItem}>
+                  <Text style={styles.bridgewaterLabel}>Risk Imbalance (Current)</Text>
+                  <Text style={styles.bridgewaterValue}>
+                    {bridgewaterResult.riskImbalanceCurrent.toFixed(2)}
+                  </Text>
+                </View>
+                <View style={styles.bridgewaterGridItem}>
+                  <Text style={styles.bridgewaterLabel}>Risk Imbalance (Target)</Text>
+                  <Text style={styles.bridgewaterValue}>
+                    {bridgewaterResult.riskImbalanceTarget.toFixed(2)}
+                  </Text>
+                </View>
+                <View style={styles.bridgewaterGridItem}>
+                  <Text style={styles.bridgewaterLabel}>Ann. Volatility (Current)</Text>
+                  <Text style={styles.bridgewaterValue}>
+                    {(bridgewaterResult.annualizedVolatilityCurrent * 100).toFixed(2)}%
+                  </Text>
+                </View>
+                <View style={styles.bridgewaterGridItem}>
+                  <Text style={styles.bridgewaterLabel}>Ann. Volatility (Target)</Text>
+                  <Text style={styles.bridgewaterValue}>
+                    {(bridgewaterResult.annualizedVolatilityTarget * 100).toFixed(2)}%
+                  </Text>
+                </View>
+              </Surface>
+
+              <Text style={styles.bridgewaterSectionTitle}>Risk-Parity Weight Guidance</Text>
+              {bridgewaterResult.assets.map(asset => (
+                <View key={asset.symbol} style={styles.weightRow}>
+                  <Text style={styles.weightSymbol}>{asset.symbol}</Text>
+                  <Text style={styles.weightValues}>
+                    {(asset.currentWeight * 100).toFixed(1)}% → {(asset.targetWeight * 100).toFixed(1)}%
+                  </Text>
+                </View>
+              ))}
+
+              {bridgewaterResult.recommendations.length > 0 && (
+                <View style={styles.bridgewaterRecommendations}>
+                  <Text style={styles.bridgewaterSectionTitle}>Model Recommendations</Text>
+                  {bridgewaterResult.recommendations.map((rec, idx) => (
+                    <Text key={`${rec}-${idx}`} style={styles.bridgewaterRecText}>• {rec}</Text>
+                  ))}
+                </View>
+              )}
+            </>
+          ) : null}
+        </Card.Content>
+      </Card>
 
       <Card style={styles.card}>
         <Card.Content>
@@ -433,6 +539,76 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.textPrimary,
     lineHeight: 20,
+  },
+  bridgewaterLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  bridgewaterHint: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginTop: 6,
+  },
+  bridgewaterError: {
+    marginTop: 10,
+    color: COLORS.warning,
+    fontSize: 13,
+  },
+  bridgewaterGrid: {
+    marginTop: 12,
+    borderRadius: 10,
+    backgroundColor: COLORS.background,
+    padding: 12,
+    gap: 10,
+  },
+  bridgewaterGridItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  bridgewaterLabel: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+  },
+  bridgewaterValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  bridgewaterSectionTitle: {
+    marginTop: 14,
+    marginBottom: 8,
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  weightRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  weightSymbol: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  weightValues: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+  },
+  bridgewaterRecommendations: {
+    marginTop: 10,
+  },
+  bridgewaterRecText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    lineHeight: 19,
+    marginBottom: 4,
   },
   emptyContainer: {
     flex: 1,

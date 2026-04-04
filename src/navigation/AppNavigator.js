@@ -4,6 +4,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { AuthContext } from '../context/AuthContext';
+import { COLORS } from '../../shared/colors';
 
 // Screens
 import AuthScreen from '../screens/AuthScreen';
@@ -40,8 +41,15 @@ const MainTabs = () => {
 
           return <MaterialCommunityIcons name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: '#6200EE',
-        tabBarInactiveTintColor: 'gray',
+        tabBarStyle: {
+          backgroundColor: '#FFFFFF',
+          borderTopColor: COLORS.tabBorder,
+          borderTopWidth: 1,
+          elevation: 0,
+          shadowOpacity: 0,
+        },
+        tabBarActiveTintColor: COLORS.tabActive,
+        tabBarInactiveTintColor: COLORS.tabInactive,
         headerShown: false,
       })}
     >

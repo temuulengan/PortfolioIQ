@@ -21,6 +21,7 @@ import { PortfolioContext } from '../context/PortfolioContext';
 import { AuthContext } from '../context/AuthContext';
 import { NotificationContext } from '../context/NotificationContext';
 import AIInsights from '../components/AIInsights';
+import MonteCarlo from '../components/MonteCarlo';
 import { formatCurrency, formatPercent } from '../../shared/helpers';
 import { COLORS, getGainLossColor } from '../../shared/colors';
 import {
@@ -98,7 +99,7 @@ const DashboardScreen = ({ navigation }) => {
           </View>
           <TouchableOpacity onPress={() => navigation.navigate('Notifications')}>
             <View>
-              <MaterialCommunityIcons name="bell-outline" size={24} color={COLORS.textPrimary} />
+              <MaterialCommunityIcons name="bell-outline" size={24} color={COLORS.primary} />
               {unreadCount > 0 && (
                 <Badge style={styles.notificationBadge} size={18}>
                   {unreadCount > 99 ? '99+' : unreadCount}
@@ -157,10 +158,22 @@ const DashboardScreen = ({ navigation }) => {
               </View>
 
               <View style={styles.holdingsInfo}>
-                <Chip icon="briefcase" style={styles.chip}>
+                <Chip
+                  style={styles.chip}
+                  textStyle={styles.chipText}
+                  icon={() => (
+                    <MaterialCommunityIcons name="briefcase" size={16} color={COLORS.primary} />
+                  )}
+                >
                   {holdings.length} Holdings
                 </Chip>
-                <Chip icon="chart-line" style={styles.chip}>
+                <Chip
+                  style={styles.chip}
+                  textStyle={styles.chipText}
+                  icon={() => (
+                    <MaterialCommunityIcons name="chart-line" size={16} color={COLORS.primary} />
+                  )}
+                >
                   {selectedPortfolio.type || 'stocks'}
                 </Chip>
               </View>
@@ -237,6 +250,12 @@ const DashboardScreen = ({ navigation }) => {
               totalGainLoss={gainLoss}
             />
 
+            <MonteCarlo
+              holdings={holdings}
+              portfolioValue={totalValue}
+              totalGainLoss={gainLoss}
+            />
+
             <View style={styles.quickActions}>
               <TouchableOpacity
                 style={styles.actionButton}
@@ -258,7 +277,7 @@ const DashboardScreen = ({ navigation }) => {
                 style={styles.actionButton}
                 onPress={() => navigation.navigate('Portfolios')}
               >
-                <MaterialCommunityIcons name="briefcase-multiple" size={32} color={COLORS.primary} />
+                <MaterialCommunityIcons name="briefcase-outline" size={32} color={COLORS.primary} />
                 <Text style={styles.actionText}>Portfolios</Text>
               </TouchableOpacity>
             </View>
@@ -278,6 +297,7 @@ const DashboardScreen = ({ navigation }) => {
         style={styles.fab}
         icon="plus"
         label="Add Holding"
+        color={COLORS.textWhite}
         onPress={() => navigation.navigate('AddHolding')}
       />
     </View>
@@ -306,9 +326,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
     paddingTop: 60,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.background,
   },
   greeting: {
     fontSize: 14,
@@ -320,10 +341,15 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
   },
   portfolioCard: {
-    margin: 16,
+    marginHorizontal: 20,
+    marginTop: 8,
+    marginBottom: 14,
     padding: 20,
-    borderRadius: 12,
-    elevation: 4,
+    borderRadius: 16,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    elevation: 0,
   },
   portfolioName: {
     fontSize: 16,
@@ -382,9 +408,17 @@ const styles = StyleSheet.create({
   chip: {
     backgroundColor: COLORS.background,
   },
+  chipText: {
+    color: COLORS.textPrimary,
+  },
   sectionCard: {
-    marginHorizontal: 16,
-    marginBottom: 16,
+    marginHorizontal: 20,
+    marginBottom: 14,
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    elevation: 0,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -393,9 +427,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 12,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    color: COLORS.textSecondary,
+    marginBottom: 8,
   },
   performerItem: {
     flexDirection: 'row',
@@ -463,15 +500,18 @@ const styles = StyleSheet.create({
   quickActions: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    padding: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
     marginBottom: 80,
   },
   actionButton: {
     alignItems: 'center',
     padding: 16,
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    elevation: 2,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    elevation: 0,
     minWidth: 100,
   },
   actionText: {
@@ -506,7 +546,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -8,
     right: -8,
-    backgroundColor: COLORS.error,
+    backgroundColor: COLORS.primary,
   },
 });
 

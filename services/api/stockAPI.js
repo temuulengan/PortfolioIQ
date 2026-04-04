@@ -90,15 +90,17 @@ export const searchStocks = async (query) => {
       },
     });
 
-    return response.data.quotes.map(quote => ({
+    const quotes = response.data && response.data.quotes ? response.data.quotes : [];
+    return quotes.map(quote => ({
       symbol: quote.symbol,
       name: quote.longname || quote.shortname,
       type: quote.quoteType,
       exchange: quote.exchange,
     }));
   } catch (error) {
-    console.error('Error searching stocks:', error);
-    throw new Error('Failed to search stocks');
+    console.error('Error searching stocks:', error?.response?.data || error.message || error);
+    // Return an empty array on failure so UI can handle gracefully
+    return [];
   }
 };
 

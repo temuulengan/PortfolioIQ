@@ -1,4 +1,4 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -24,6 +24,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { PortfolioContext } from '../context/PortfolioContext';
 import { formatCurrency, formatPercent } from '../../shared/helpers';
 import { COLORS, getGainLossColor } from '../../shared/colors';
+import { getPortfolioHoldings } from '../../services/firebase/firebase';
 import {
   calculatePortfolioValue,
   calculatePortfolioCostBasis,
@@ -51,6 +52,57 @@ const PortfoliosScreen = ({ navigation }) => {
   const [portfolioType, setPortfolioType] = useState('stocks');
   const [portfolioCurrency, setPortfolioCurrency] = useState('USD');
   const [errors, setErrors] = useState({});
+  const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
+  const [deleteError, setDeleteError] = useState(null);
+  const [portfolioHoldingsMap, setPortfolioHoldingsMap] = useState({});
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadAllPortfolioHoldings = async () => {
+      if (portfolios.length === 0) {
+        if (isMounted) {
+          setPortfolioHoldingsMap({});
+        }
+        return;
+      }
+
+      try {
+        const results = await Promise.all(
+          portfolios.map(async (portfolio) => {
+            const portfolioHoldings = await getPortfolioHoldings(portfolio.id);
+            return [portfolio.id, portfolioHoldings];
+          })
+        );
+
+        if (isMounted) {
+          setPortfolioHoldingsMap(Object.fromEntries(results));
+        }
+      } catch (error) {
+        console.error('Error loading portfolio holdings summaries:', error);
+      }
+    };
+
+    loadAllPortfolioHoldings();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [portfolios]);
+
+  useEffect(() => {
+    if (!selectedPortfolio?.id) return;
+    setPortfolioHoldingsMap((prev) => ({
+      ...prev,
+      [selectedPortfolio.id]: holdings,
+    }));
+  }, [selectedPortfolio?.id, holdings]);
+
+  const getHoldingsForPortfolio = (portfolioId) => {
+    return portfolioHoldingsMap[portfolioId] || [];
+  };
 
   const handleCreatePortfolio = () => {
     setEditingPortfolio(null);
@@ -104,31 +156,35 @@ const PortfoliosScreen = ({ navigation }) => {
     }
   };
 
-  const handleDeletePortfolio = (portfolio) => {
-    setMenuVisible(null);
-    
-    // Get holdings count for this portfolio
-    const portfolioHoldings = holdings.filter(h => h.portfolioId === portfolio.id);
-    const holdingsCount = portfolioHoldings.length;
-    const totalValue = calculatePortfolioValue(portfolioHoldings);
+  const confirmDeletePortfolio = async () => {
+    if (!deleteTarget) return;
+    if (deleteConfirmInput.trim() !== deleteTarget.name) {
+      setDeleteError('Portfolio name does not match');
+      return;
+    }
 
-    Alert.alert(
-      'Delete Portfolio',
-      `Delete "${portfolio.name}"?\n\nThis will permanently delete ${holdingsCount} holding${holdingsCount !== 1 ? 's' : ''} with a total value of ${formatCurrency(totalValue, portfolio.currency)}.\n\nThis action CANNOT be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete Portfolio',
-          style: 'destructive',
-          onPress: async () => {
-            const result = await deleteExistingPortfolio(portfolio.id);
-            if (!result.success) {
-              Alert.alert('Error', result.error);
-            }
-          },
-        },
-      ]
-    );
+    try {
+      const result = await deleteExistingPortfolio(deleteTarget.id);
+      if (!result.success) {
+        Alert.alert('Error', result.error);
+      }
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Failed to delete portfolio');
+    } finally {
+      setDeleteDialogVisible(false);
+      setDeleteTarget(null);
+      setDeleteConfirmInput('');
+      setDeleteError(null);
+    }
+  };
+
+  const handleDeletePortfolio = (portfolio) => {
+    // Show a stronger confirmation dialog requiring the user to type the portfolio name
+    setMenuVisible(null);
+    setDeleteTarget(portfolio);
+    setDeleteConfirmInput('');
+    setDeleteError(null);
+    setDeleteDialogVisible(true);
   };
 
   const handleSelectPortfolio = (portfolio) => {
@@ -137,7 +193,7 @@ const PortfoliosScreen = ({ navigation }) => {
   };
 
   const renderPortfolioCard = ({ item }) => {
-    const portfolioHoldings = holdings.filter(h => h.portfolioId === item.id);
+    const portfolioHoldings = getHoldingsForPortfolio(item.id);
     const totalValue = calculatePortfolioValue(portfolioHoldings);
     const costBasis = calculatePortfolioCostBasis(portfolioHoldings);
     const gainLoss = calculatePortfolioGainLoss(portfolioHoldings);
@@ -275,6 +331,42 @@ const PortfoliosScreen = ({ navigation }) => {
     );
   }
 
+    // Delete confirmation dialog (type-to-confirm)
+    const DeleteDialog = () => (
+      <Portal>
+        <Dialog visible={deleteDialogVisible} onDismiss={() => setDeleteDialogVisible(false)}>
+          <Dialog.Title>Delete portfolio "{deleteTarget?.name}"?</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph>
+              This will permanently delete this portfolio and its holdings. This action cannot be undone.
+            </Paragraph>
+            <Paragraph style={{ marginTop: 12 }}>
+              To confirm, type the portfolio name below:
+            </Paragraph>
+
+            <TextInput
+              value={deleteConfirmInput}
+              onChangeText={(t) => { setDeleteConfirmInput(t); setDeleteError(null); }}
+              label="Portfolio name"
+              style={{ marginTop: 12 }}
+            />
+            {deleteError && <HelperText type="error">{deleteError}</HelperText>}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setDeleteDialogVisible(false)}>Cancel</Button>
+            <Button
+              mode="contained"
+              buttonColor="#E53935"
+              onPress={confirmDeletePortfolio}
+              disabled={deleteConfirmInput.trim() !== (deleteTarget?.name || '')}
+            >
+              Delete Portfolio
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+    );
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -300,6 +392,8 @@ const PortfoliosScreen = ({ navigation }) => {
         label="Create Portfolio"
         onPress={handleCreatePortfolio}
       />
+
+      <DeleteDialog />
 
       <Portal>
         <Dialog visible={dialogVisible} onDismiss={() => setDialogVisible(false)}>

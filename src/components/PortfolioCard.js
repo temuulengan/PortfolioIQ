@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import { Card, Title, Paragraph, Text } from 'react-native-paper';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { Title, Paragraph, Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { formatCurrency, formatPercent } from '../../shared/helpers';
 import { 
@@ -9,6 +9,7 @@ import {
   calculatePortfolioGainLoss,
   calculatePortfolioGainLossPercent 
 } from '../../shared/calculations';
+import { COLORS, Shadow, Spacing } from '../../shared/colors';
 
 const PortfolioCard = ({ portfolio, holdings = [], onPress }) => {
   const totalValue = calculatePortfolioValue(holdings);
@@ -19,14 +20,14 @@ const PortfolioCard = ({ portfolio, holdings = [], onPress }) => {
   const isPositive = gainLoss >= 0;
 
   return (
-    <Card style={styles.card} onPress={onPress}>
-      <Card.Content>
+    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>
+      <View style={styles.content}>
         <View style={styles.header}>
           <View style={styles.titleContainer}>
             <MaterialCommunityIcons 
               name="briefcase" 
               size={24} 
-              color="#6200EE" 
+              color={COLORS.primary}
               style={styles.icon}
             />
             <View>
@@ -41,7 +42,7 @@ const PortfolioCard = ({ portfolio, holdings = [], onPress }) => {
           <MaterialCommunityIcons 
             name="chevron-right" 
             size={24} 
-            color="#757575" 
+            color={COLORS.textSecondary}
           />
         </View>
 
@@ -68,7 +69,7 @@ const PortfolioCard = ({ portfolio, holdings = [], onPress }) => {
               <Text 
                 style={[
                   styles.gainLossValue,
-                  { color: isPositive ? '#4CAF50' : '#B00020' }
+                  { color: isPositive ? COLORS.gainText : COLORS.lossText }
                 ]}
               >
                 {formatCurrency(gainLoss, portfolio.currency)}
@@ -76,7 +77,7 @@ const PortfolioCard = ({ portfolio, holdings = [], onPress }) => {
               <Text 
                 style={[
                   styles.gainLossPercent,
-                  { color: isPositive ? '#4CAF50' : '#B00020' }
+                  { color: isPositive ? COLORS.gainText : COLORS.lossText }
                 ]}
               >
                 ({formatPercent(gainLossPercent)})
@@ -89,16 +90,21 @@ const PortfolioCard = ({ portfolio, holdings = [], onPress }) => {
             <Text style={styles.statValue}>{holdings.length}</Text>
           </View>
         </View>
-      </Card.Content>
-    </Card>
+      </View>
+    </TouchableOpacity>
   );
 };
 
 const styles = StyleSheet.create({
   card: {
-    marginHorizontal: 16,
+    marginHorizontal: Spacing.screenHorizontal,
     marginVertical: 8,
-    elevation: 2,
+    borderRadius: Spacing.cardRadius,
+    backgroundColor: COLORS.surface,
+    ...Shadow.card,
+  },
+  content: {
+    padding: 16,
   },
   header: {
     flexDirection: 'row',
@@ -116,17 +122,18 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '700',
     marginBottom: 0,
+    color: COLORS.textPrimary,
   },
   description: {
-    fontSize: 12,
-    color: '#757575',
+    fontSize: 13,
+    color: COLORS.textSecondary,
     marginTop: 2,
   },
   divider: {
     height: 1,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: COLORS.divider,
     marginVertical: 12,
   },
   statsContainer: {
@@ -139,13 +146,13 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   statLabel: {
-    fontSize: 14,
-    color: '#757575',
+    fontSize: 13,
+    color: COLORS.textSecondary,
   },
   statValue: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
-    color: '#000000',
+    color: COLORS.textPrimary,
   },
   gainLossContainer: {
     flexDirection: 'row',
@@ -153,11 +160,11 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   gainLossValue: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
   },
   gainLossPercent: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '500',
   },
 });

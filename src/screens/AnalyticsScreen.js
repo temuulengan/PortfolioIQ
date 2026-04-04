@@ -169,10 +169,9 @@ const AnalyticsScreen = () => {
         </Text>
       </Surface>
 
-      <Card style={styles.card}>
-        <Card.Content>
+      <View style={styles.chartSection}>
           <View style={styles.cardHeader}>
-            <Title style={styles.cardTitle}>Portfolio Growth</Title>
+            <Text style={styles.sectionTitle}>Portfolio Growth</Text>
             <SegmentedButtons
               value={timeRange}
               onValueChange={setTimeRange}
@@ -205,12 +204,10 @@ const AnalyticsScreen = () => {
               style={styles.chart}
             />
           )}
-        </Card.Content>
-      </Card>
+      </View>
 
-      <Card style={styles.card}>
-        <Card.Content>
-          <Title style={styles.cardTitle}>Holdings Allocation</Title>
+      <View style={styles.chartSection}>
+          <Text style={styles.sectionTitle}>Holdings Allocation</Text>
           {holdingsPieData.length > 0 ? (
             <PieChart
               data={holdingsPieData}
@@ -225,12 +222,10 @@ const AnalyticsScreen = () => {
           ) : (
             <Text style={styles.noDataText}>No data available</Text>
           )}
-        </Card.Content>
-      </Card>
+      </View>
 
-      <Card style={styles.card}>
-        <Card.Content>
-          <Title style={styles.cardTitle}>Asset Type Distribution</Title>
+      <View style={styles.chartSection}>
+          <Text style={styles.sectionTitle}>Asset Type Distribution</Text>
           {assetTypePieData.length > 0 ? (
             <PieChart
               data={assetTypePieData}
@@ -245,12 +240,11 @@ const AnalyticsScreen = () => {
           ) : (
             <Text style={styles.noDataText}>No data available</Text>
           )}
-        </Card.Content>
-      </Card>
+      </View>
 
       <Card style={styles.card}>
         <Card.Content>
-          <Title style={styles.cardTitle}>Top Performers</Title>
+          <Text style={styles.sectionTitle}>Top Performers</Text>
           {topPerformers.map((holding, index) => {
             const gainLossPercent = calculateGainLossPercent(
               holding.purchasePrice,
@@ -285,7 +279,7 @@ const AnalyticsScreen = () => {
       {bottomPerformers.length > 0 && (
         <Card style={styles.card}>
           <Card.Content>
-            <Title style={styles.cardTitle}>Bottom Performers</Title>
+            <Text style={styles.sectionTitle}>Bottom Performers</Text>
             {bottomPerformers.map((holding, index) => {
               const gainLossPercent = calculateGainLossPercent(
                 holding.purchasePrice,
@@ -329,9 +323,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   header: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
     paddingTop: 60,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.background,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
@@ -362,8 +357,22 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
   },
   card: {
-    marginHorizontal: 16,
-    marginBottom: 16,
+    marginHorizontal: 20,
+    marginBottom: 14,
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    elevation: 0,
+  },
+  chartSection: {
+    marginHorizontal: 20,
+    marginBottom: 14,
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   cardHeader: {
     marginBottom: 16,
@@ -372,6 +381,14 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    color: COLORS.textSecondary,
+    marginBottom: 10,
   },
   timeRangeButtons: {
     marginTop: 8,

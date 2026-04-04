@@ -17,7 +17,7 @@ import {
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
-import { COLORS } from '../../shared/colors';
+import { COLORS, Shadow } from '../../shared/colors';
 import { formatRelativeTime } from '../../shared/helpers';
 import NotificationService from '../../services/notifications/notificationService';
 
@@ -244,7 +244,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     paddingTop: 60,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.background,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
@@ -271,15 +271,17 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 20,
+    paddingHorizontal: 16,
   },
   sectionHeader: {
     fontSize: 14,
     fontWeight: '600',
     color: COLORS.textSecondary,
-    paddingHorizontal: 16,
+    paddingHorizontal: 4,
     paddingVertical: 12,
     backgroundColor: COLORS.background,
     textTransform: 'uppercase',
+    letterSpacing: 1.2,
   },
   notificationItem: {
     flexDirection: 'row',
@@ -287,9 +289,14 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     alignItems: 'flex-start',
     gap: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: 8,
+    ...Shadow.card,
   },
   unreadItem: {
-    backgroundColor: '#F3E5F5',
+    borderColor: COLORS.primary,
   },
   iconContainer: {
     width: 40,
@@ -326,7 +333,7 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: COLORS.primary,
-    marginTop: 8,
+    marginTop: 10,
   },
   swipeActionsContainer: {
     flexDirection: 'row',

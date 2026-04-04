@@ -33,14 +33,21 @@ import { firebaseConfig } from './firebase-config';
 // Initialize Firebase (only once)
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 
-// Initialize Auth with AsyncStorage persistence (only if not already initialized)
+// Initialize Auth with AsyncStorage persistence for React Native
+// Prefer initializeAuth with React Native persistence; fall back to getAuth if already initialized
 let auth;
 try {
-  auth = getAuth(app);
-} catch {
   auth = initializeAuth(app, {
-    persistence: getReactNativePersistence(ReactNativeAsyncStorage)
+    persistence: getReactNativePersistence(ReactNativeAsyncStorage),
   });
+} catch (e) {
+  // If initializeAuth throws (e.g., already initialized), fall back to getAuth
+  try {
+    auth = getAuth(app);
+  } catch (err) {
+    // Last-resort: rethrow the original error for visibility
+    throw e;
+  }
 }
 
 const db = getFirestore(app);
@@ -191,17 +198,31 @@ export const updatePortfolio = async (portfolioId, updates) => {
  */
 export const deletePortfolio = async (portfolioId) => {
   try {
-    // Delete all holdings in this portfolio first
+    const user = getCurrentUser();
+    if (!user) throw new Error('User not authenticated');
+
+    // Ensure the portfolio exists and belongs to the current user
+    const portfolioRef = doc(db, 'portfolios', portfolioId);
+    const portfolioSnap = await getDoc(portfolioRef);
+    if (!portfolioSnap.exists()) throw new Error('Portfolio not found');
+
+    const portfolioData = portfolioSnap.data();
+    if (portfolioData.userId !== user.uid) {
+      throw new Error('Insufficient permissions to delete this portfolio');
+    }
+
+    // Delete all holdings in this portfolio that belong to the current user
     const holdingsQuery = query(
       collection(db, 'holdings'),
-      where('portfolioId', '==', portfolioId)
+      where('portfolioId', '==', portfolioId),
+      where('userId', '==', user.uid)
     );
     const holdingsSnapshot = await getDocs(holdingsQuery);
-    const deletePromises = holdingsSnapshot.docs.map((doc) => deleteDoc(doc.ref));
+    const deletePromises = holdingsSnapshot.docs.map((d) => deleteDoc(d.ref));
     await Promise.all(deletePromises);
 
     // Then delete the portfolio
-    await deleteDoc(doc(db, 'portfolios', portfolioId));
+    await deleteDoc(portfolioRef);
   } catch (error) {
     throw error;
   }

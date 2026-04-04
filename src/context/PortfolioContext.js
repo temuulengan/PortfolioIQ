@@ -64,7 +64,43 @@ export const PortfolioProvider = ({ children }) => {
     try {
       setLoading(true);
       const holdingsList = await getPortfolioHoldings(portfolioId);
-      setHoldings(holdingsList);
+      // Filter out archived holdings so they don't show in the UI
+      const visibleHoldings = holdingsList.filter(h => !h.archived);
+
+      // Attempt to refresh current prices before updating state to avoid double-render flicker
+      if (visibleHoldings && visibleHoldings.length > 0) {
+        try {
+          const symbols = visibleHoldings.map(h => h.symbol).filter(Boolean);
+          if (symbols.length > 0) {
+            const pricesData = await getMultipleStockPrices(symbols);
+
+            const updatedHoldings = await Promise.all(visibleHoldings.map(async (holding) => {
+              const priceObj = pricesData.find(p => p.symbol === holding.symbol);
+              if (priceObj && priceObj.price) {
+                const updated = { ...holding, currentPrice: priceObj.price, lastUpdated: new Date().toISOString() };
+                try {
+                  await updateHolding(holding.id, { currentPrice: priceObj.price, lastUpdated: updated.lastUpdated });
+                } catch (err) {
+                  // persist failure should not block UI
+                  console.error(`Failed to persist updated price for ${holding.symbol}:`, err.message || err);
+                }
+                return updated;
+              }
+              return holding;
+            }));
+
+            setHoldings(updatedHoldings);
+          } else {
+            setHoldings(visibleHoldings);
+          }
+        } catch (err) {
+          console.error('Error refreshing prices after loading holdings:', err);
+          // Fall back to visible holdings if price refresh fails
+          setHoldings(visibleHoldings);
+        }
+      } else {
+        setHoldings(visibleHoldings);
+      }
     } catch (error) {
       console.error('Error loading holdings:', error);
     } finally {

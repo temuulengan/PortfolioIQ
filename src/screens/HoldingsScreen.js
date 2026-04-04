@@ -1,4 +1,4 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useState, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -15,13 +15,15 @@ import {
   Menu,
   ActivityIndicator,
   Chip,
+  Snackbar,
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
 import { PortfolioContext } from '../context/PortfolioContext';
 import HoldingCard from '../components/HoldingCard';
-import { sortBy } from '../../shared/helpers';
-import { COLORS } from '../../shared/colors';
+import { sortBy, formatCurrency } from '../../shared/helpers';
+import { calculatePortfolioValue } from '../../shared/calculations';
+import { COLORS, Spacing, Shadow } from '../../shared/colors';
 
 const HoldingsScreen = ({ navigation }) => {
   const {
@@ -33,33 +35,51 @@ const HoldingsScreen = ({ navigation }) => {
     selectedPortfolio,
   } = useContext(PortfolioContext);
 
+  const { updateExistingHolding } = useContext(PortfolioContext);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [sortKey, setSortKey] = useState('symbol');
   const [sortOrder, setSortOrder] = useState('asc');
   const [menuVisible, setMenuVisible] = useState(false);
+  const [activeView, setActiveView] = useState('holdings');
+  const [selectedPeriod, setSelectedPeriod] = useState('1M');
 
   const handleRefresh = async () => {
     await refreshPrices();
   };
 
-  const handleDeleteHolding = (holdingId, symbol, name) => {
-    Alert.alert(
-      'Delete Holding',
-      `Delete ${symbol}?\n\nThis will permanently remove ${name} from your portfolio. This action cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            const result = await deleteExistingHolding(holdingId);
-            if (!result.success) {
-              Alert.alert('Error', result.error);
-            }
-          },
-        },
-      ]
-    );
+  // Quick-delete with Undo: archive immediately, schedule permanent delete
+  const pendingDeletesRef = useRef({});
+  const [snackbar, setSnackbar] = useState({ visible: false, message: '', holdingId: null });
+
+  const handleDeleteHolding = async (holdingId, symbol, name) => {
+    try {
+      // Archive the holding (soft-delete)
+      const res = await updateExistingHolding(holdingId, { archived: true });
+      if (!res.success) {
+        Alert.alert('Error', res.error || 'Failed to archive holding');
+        return;
+      }
+
+      // Show undo snackbar
+      setSnackbar({ visible: true, message: `${symbol} removed`, holdingId });
+
+      // Schedule permanent deletion in 8s
+      const timeoutId = setTimeout(async () => {
+        try {
+          await deleteExistingHolding(holdingId);
+        } catch (err) {
+          console.error('Permanent delete failed:', err);
+        }
+        // cleanup
+        delete pendingDeletesRef.current[holdingId];
+      }, 8000);
+
+      pendingDeletesRef.current[holdingId] = timeoutId;
+    } catch (error) {
+      console.error('Delete holding error:', error);
+      Alert.alert('Error', error?.message || 'Failed to delete holding');
+    }
   };
 
   const renderRightActions = (progress, dragX, item) => {
@@ -90,6 +110,7 @@ const HoldingsScreen = ({ navigation }) => {
   );
 
   const sortedHoldings = sortBy(filteredHoldings, sortKey, sortOrder);
+  const totalValue = calculatePortfolioValue(holdings);
 
   const handleSort = (key) => {
     if (sortKey === key) {
@@ -115,6 +136,28 @@ const HoldingsScreen = ({ navigation }) => {
 
   const renderHeader = () => (
     <View style={styles.header}>
+      <View style={styles.segmentContainer}>
+        <TouchableOpacity
+          onPress={() => setActiveView('holdings')}
+          style={[styles.segmentButton, activeView === 'holdings' && styles.segmentButtonActive]}
+        >
+          <Text style={[styles.segmentText, activeView === 'holdings' && styles.segmentTextActive]}>
+            Holdings
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setActiveView('transactions')}
+          style={[styles.segmentButton, activeView === 'transactions' && styles.segmentButtonActive]}
+        >
+          <Text style={[styles.segmentText, activeView === 'transactions' && styles.segmentTextActive]}>
+            Transactions
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <Text style={styles.totalValue}>{formatCurrency(totalValue, selectedPortfolio?.currency)}</Text>
+      <Text style={styles.sectionLabel}>Portfolio Holdings</Text>
+
       <View style={styles.searchContainer}>
         <Searchbar
           placeholder="Search holdings..."
@@ -193,39 +236,102 @@ const HoldingsScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <FlatList
-        data={sortedHoldings}
-        renderItem={({ item }) => (
-          <Swipeable
-            renderRightActions={(progress, dragX) => renderRightActions(progress, dragX, item)}
-            overshootRight={false}
-            friction={2}
-          >
-            <HoldingCard
-              holding={item}
-              onPress={() => {
-                // Navigate to holding details (not implemented)
-              }}
-            />
-          </Swipeable>
-        )}
-        keyExtractor={(item) => item.id}
-        ListHeaderComponent={renderHeader}
-        ListEmptyComponent={renderEmpty}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-        }
-        contentContainerStyle={
-          sortedHoldings.length === 0 ? styles.emptyListContent : styles.listContent
-        }
-      />
+      {activeView === 'holdings' ? (
+        <FlatList
+          data={sortedHoldings}
+          renderItem={({ item }) => (
+            <Swipeable
+              renderRightActions={(progress, dragX) => renderRightActions(progress, dragX, item)}
+              overshootRight={false}
+              friction={2}
+            >
+              <HoldingCard
+                holding={item}
+                onPress={() => {
+                  // Navigate to holding details (not implemented)
+                }}
+              />
+            </Swipeable>
+          )}
+          keyExtractor={(item) => item.id}
+          ListHeaderComponent={renderHeader}
+          ListEmptyComponent={renderEmpty}
+          ListFooterComponent={
+            <View style={styles.periodRow}>
+              {['1D', '1W', '1M', '1Y', '5Y'].map((period) => (
+                <TouchableOpacity
+                  key={period}
+                  style={[
+                    styles.periodPill,
+                    selectedPeriod === period && styles.periodPillActive,
+                  ]}
+                  onPress={() => setSelectedPeriod(period)}
+                >
+                  <Text
+                    style={[
+                      styles.periodText,
+                      selectedPeriod === period && styles.periodTextActive,
+                    ]}
+                  >
+                    {period}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          }
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          }
+          contentContainerStyle={
+            sortedHoldings.length === 0 ? styles.emptyListContent : styles.listContent
+          }
+        />
+      ) : (
+        <View style={styles.transactionsEmptyWrap}>
+          {renderHeader()}
+          <View style={styles.emptyContainer}>
+            <MaterialCommunityIcons name="swap-horizontal-circle-outline" size={72} color={COLORS.surfaceVariant} />
+            <Text style={styles.emptyTitle}>No Transactions Yet</Text>
+            <Text style={styles.emptyText}>Transaction history UI is reserved for the next release.</Text>
+          </View>
+        </View>
+      )}
 
       <FAB
         style={styles.fab}
         icon="plus"
         label="Add Holding"
+        color={COLORS.textWhite}
         onPress={() => navigation.navigate('AddHolding')}
       />
+
+      {/* Undo Snackbar for quick deletes */}
+      <Snackbar
+        visible={snackbar.visible}
+        onDismiss={() => setSnackbar({ visible: false, message: '', holdingId: null })}
+        action={{
+          label: 'Undo',
+          onPress: async () => {
+            const holdingId = snackbar.holdingId;
+            const timeoutId = pendingDeletesRef.current[holdingId];
+            if (timeoutId) {
+              clearTimeout(timeoutId);
+              delete pendingDeletesRef.current[holdingId];
+            }
+
+            // Unarchive the holding
+            const res = await updateExistingHolding(holdingId, { archived: false });
+            if (!res.success) {
+              Alert.alert('Error', res.error || 'Failed to restore holding');
+            }
+
+            setSnackbar({ visible: false, message: '', holdingId: null });
+          },
+        }}
+        duration={8000}
+      >
+        {snackbar.message}
+      </Snackbar>
     </View>
   );
 };
@@ -246,19 +352,58 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
   },
   header: {
-    padding: 16,
+    paddingHorizontal: Spacing.screenHorizontal,
+    paddingVertical: 16,
     paddingTop: 60,
+    backgroundColor: COLORS.background,
+  },
+  segmentContainer: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.divider,
+    borderRadius: 24,
+    padding: 4,
+    marginBottom: 16,
+  },
+  segmentButton: {
+    flex: 1,
+    borderRadius: 20,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  segmentButtonActive: {
     backgroundColor: COLORS.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    ...Shadow.card,
+  },
+  segmentText: {
+    color: COLORS.textSecondary,
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  segmentTextActive: {
+    color: COLORS.textPrimary,
+  },
+  totalValue: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginBottom: 6,
+  },
+  sectionLabel: {
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    marginBottom: 12,
   },
   searchContainer: {
     marginBottom: 12,
   },
   searchbar: {
     elevation: 0,
-    borderRadius: 8,
-    backgroundColor: COLORS.background,
+    borderRadius: 12,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   searchInput: {
     fontSize: 16,
@@ -273,14 +418,18 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   chip: {
-    backgroundColor: '#E8F5E9',
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderWidth: 1,
   },
   sortButton: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     borderRadius: 8,
     gap: 4,
   },
@@ -312,6 +461,33 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 100,
   },
+  periodRow: {
+    marginTop: 12,
+    marginBottom: 96,
+    marginHorizontal: Spacing.screenHorizontal,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  periodPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 18,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  periodPillActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  periodText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  periodTextActive: {
+    color: COLORS.textWhite,
+  },
   emptyListContent: {
     flexGrow: 1,
   },
@@ -337,6 +513,9 @@ const styles = StyleSheet.create({
     right: 16,
     bottom: 16,
     backgroundColor: COLORS.primary,
+  },
+  transactionsEmptyWrap: {
+    flex: 1,
   },
 });
 

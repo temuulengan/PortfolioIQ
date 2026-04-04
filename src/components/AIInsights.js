@@ -80,11 +80,13 @@ const getHealthCardCopy = ({ gainLossPercent, concentration, volatility, holding
 };
 
 const SemiGauge = ({ value }) => {
-  const gaugeValue = clamp(value, 0, 100);
+  const safeValue = Number.isFinite(value) ? value : 0;
+  const gaugeValue = clamp(safeValue, 0, 100);
   const width = 112;
   const height = 70;
   const strokeWidth = 11;
-  const radius = 46;
+  // inset radius slightly so stroke caps sit inside the track and avoid visible overflow
+  const radius = 46 - Math.ceil(strokeWidth / 2);
   const centerX = width / 2;
   const centerY = 58;
   const startX = centerX - radius;
@@ -95,28 +97,54 @@ const SemiGauge = ({ value }) => {
   const progressAngle = Math.PI * (1 - (gaugeValue / 100));
   const progressX = centerX + (radius * Math.cos(progressAngle));
   const progressY = centerY - (radius * Math.sin(progressAngle));
-  const largeArcFlag = gaugeValue > 50 ? 1 : 0;
-
+  // large-arc-flag should only be 1 for arcs > 180deg; our gauge is a semicircle
+  // (max 180deg) so keep the flag 0 to ensure the arc follows the top path.
+  const largeArcFlag = 0;
   const trackPath = `M ${startX} ${startY} A ${radius} ${radius} 0 0 1 ${endX} ${endY}`;
-  const progressPath = `M ${startX} ${startY} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${progressX} ${progressY}`;
+
+  // Build progressPath safely: handle edge-cases (0 and 100) and validate numeric coords
+  let progressPath = null;
+  if (gaugeValue <= 0) {
+    progressPath = null;
+  } else if (gaugeValue >= 100) {
+    progressPath = trackPath; // draw full arc
+  } else {
+    // validate numbers before composing path string
+    if (
+      Number.isFinite(progressX) &&
+      Number.isFinite(progressY) &&
+      Number.isFinite(startX) &&
+      Number.isFinite(startY)
+    ) {
+      progressPath = `M ${startX} ${startY} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${progressX} ${progressY}`;
+    } else {
+      // Avoid creating invalid path strings — log for debugging
+      progressPath = null;
+      console.warn('SemiGauge: invalid path coordinates', { gaugeValue, progressX, progressY, startX, startY });
+    }
+  }
 
   return (
     <View style={styles.gaugeWrap}>
       <Svg width={width} height={height}>
         <Path
           d={trackPath}
-          stroke="#BCD6FB"
+          stroke={COLORS.chartGrid || '#E8E4DF'}
           strokeWidth={strokeWidth}
           fill="none"
           strokeLinecap="round"
+          strokeLinejoin="round"
         />
-        <Path
-          d={progressPath}
-          stroke="#4A78E3"
-          strokeWidth={strokeWidth}
-          fill="none"
-          strokeLinecap="round"
-        />
+        {progressPath && (
+          <Path
+            d={progressPath}
+            stroke={COLORS.chartLine || COLORS.primary}
+            strokeWidth={strokeWidth}
+            fill="none"
+            strokeLinecap="butt"
+            strokeLinejoin="round"
+          />
+        )}
       </Svg>
       <Text style={styles.gaugeValue}>{Math.round(gaugeValue)}%</Text>
     </View>
@@ -636,7 +664,7 @@ const styles = StyleSheet.create({
   },
   gaugeValue: {
     position: 'absolute',
-    top: 24,
+    top: 30,
     fontSize: 24,
     fontWeight: '700',
     color: '#1F2937',

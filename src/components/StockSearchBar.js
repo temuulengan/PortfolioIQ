@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
-import { Searchbar, List, Text, ActivityIndicator } from 'react-native-paper';
+import { Searchbar, List, Text, ActivityIndicator, HelperText } from 'react-native-paper';
 import { searchStocks } from '../../services/api/stockAPI';
 import { debounce } from '../../shared/helpers';
 
@@ -9,6 +9,7 @@ const StockSearchBar = ({ onSelectStock, placeholder = 'Search stocks...' }) => 
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [searchError, setSearchError] = useState(null);
 
   const handleSearch = debounce(async (query) => {
     if (query.length < 1) {
@@ -21,10 +22,12 @@ const StockSearchBar = ({ onSelectStock, placeholder = 'Search stocks...' }) => 
       setLoading(true);
       const results = await searchStocks(query);
       setSearchResults(results);
+      setSearchError(null);
       setShowResults(true);
     } catch (error) {
       console.error('Search error:', error);
       setSearchResults([]);
+      setSearchError(error?.message || 'Search failed');
     } finally {
       setLoading(false);
     }
@@ -101,6 +104,12 @@ const StockSearchBar = ({ onSelectStock, placeholder = 'Search stocks...' }) => 
         icon="magnify"
         clearIcon="close"
       />
+
+      {searchError && (
+        <HelperText type="error" visible={!!searchError}>
+          {searchError}
+        </HelperText>
+      )}
 
       {loading && (
         <View style={styles.loadingContainer}>

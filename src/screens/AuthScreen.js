@@ -7,6 +7,7 @@ import {
   Platform,
   Image,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   TextInput,
   Button,
@@ -18,9 +19,19 @@ import {
 } from 'react-native-paper';
 import { AuthContext } from '../context/AuthContext';
 import { isValidEmail, isValidPassword, getErrorMessage } from '../../shared/helpers';
+import { COLORS } from '../../shared/colors';
 
 const AuthScreen = () => {
   const { login, register, resetPassword } = useContext(AuthContext);
+
+  const inputTheme = {
+    colors: {
+      primary: COLORS.primary,
+      outline: COLORS.border,
+      onSurfaceVariant: COLORS.textSecondary,
+      error: COLORS.error,
+    },
+  };
 
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
@@ -123,16 +134,17 @@ const AuthScreen = () => {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.header}>
-          <Title style={styles.title}>PortfolioIQ</Title>
-          <Text style={styles.subtitle}>
-            {isLogin ? 'Welcome Back!' : 'Create Account'}
-          </Text>
-        </View>
+      <SafeAreaView style={{ flex: 1 }}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.header}>
+            <Title style={styles.title}>PortfolioIQ</Title>
+            <Text style={styles.subtitle}>
+              {isLogin ? 'Welcome Back!' : 'Create Account'}
+            </Text>
+          </View>
 
         <Surface style={styles.formContainer}>
           {!isLogin && (
@@ -143,6 +155,7 @@ const AuthScreen = () => {
                 onChangeText={setDisplayName}
                 mode="outlined"
                 style={styles.input}
+                theme={inputTheme}
                 error={!!errors.displayName}
                 autoCapitalize="words"
               />
@@ -158,6 +171,7 @@ const AuthScreen = () => {
             onChangeText={setEmail}
             mode="outlined"
             style={styles.input}
+            theme={inputTheme}
             keyboardType="email-address"
             autoCapitalize="none"
             error={!!errors.email}
@@ -172,6 +186,7 @@ const AuthScreen = () => {
             onChangeText={setPassword}
             mode="outlined"
             style={styles.input}
+            theme={inputTheme}
             secureTextEntry={!showPassword}
             error={!!errors.password}
             right={
@@ -193,6 +208,7 @@ const AuthScreen = () => {
                 onChangeText={setConfirmPassword}
                 mode="outlined"
                 style={styles.input}
+                theme={inputTheme}
                 secureTextEntry={!showPassword}
                 error={!!errors.confirmPassword}
               />
@@ -209,6 +225,8 @@ const AuthScreen = () => {
             disabled={loading}
             style={styles.submitButton}
             contentStyle={styles.submitButtonContent}
+            buttonColor={COLORS.primary}
+            textColor={COLORS.textWhite}
           >
             {isLogin ? 'Login' : 'Sign Up'}
           </Button>
@@ -219,6 +237,7 @@ const AuthScreen = () => {
               onPress={handleForgotPassword}
               disabled={loading}
               style={styles.forgotButton}
+              textColor={COLORS.primary}
             >
               Forgot Password?
             </Button>
@@ -233,12 +252,15 @@ const AuthScreen = () => {
               onPress={toggleMode}
               disabled={loading}
               compact
+              textColor={COLORS.primary}
             >
               {isLogin ? 'Sign Up' : 'Login'}
             </Button>
           </View>
         </Surface>
       </ScrollView>
+
+      </SafeAreaView>
 
       <Snackbar
         visible={snackbar.visible}
@@ -255,7 +277,7 @@ const AuthScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: COLORS.background,
   },
   scrollContent: {
     flexGrow: 1,
@@ -264,22 +286,27 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
+    paddingTop: 24,
     marginBottom: 32,
   },
   title: {
     fontSize: 36,
     fontWeight: 'bold',
-    color: '#6200EE',
+    color: COLORS.primary,
     marginBottom: 8,
+    lineHeight: 44,
   },
   subtitle: {
     fontSize: 18,
-    color: '#757575',
+    color: COLORS.textSecondary,
   },
   formContainer: {
     padding: 24,
-    borderRadius: 12,
-    elevation: 2,
+    borderRadius: 16,
+    elevation: 0,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   input: {
     marginBottom: 4,
@@ -302,10 +329,10 @@ const styles = StyleSheet.create({
   },
   toggleText: {
     fontSize: 14,
-    color: '#757575',
+    color: COLORS.textSecondary,
   },
   snackbar: {
-    backgroundColor: '#323232',
+    backgroundColor: COLORS.backgroundDark,
   },
 });
 

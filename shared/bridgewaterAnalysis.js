@@ -281,6 +281,8 @@ export const runBridgewaterAnalysis = async (holdings, options = {}) => {
     success: true,
     method: 'Bridgewater-inspired risk parity (local deterministic engine)',
     lookbackDays: commonDates.length,
+    covarianceMatrix,
+    returnsMatrix,
     annualizedVolatilityCurrent: currentBreakdown.sigmaAnnualized,
     annualizedVolatilityTarget: targetBreakdown.sigmaAnnualized,
     riskImbalanceCurrent: currentRiskImbalance,

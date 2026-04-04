@@ -4,6 +4,8 @@ import { Card, Text, Button } from 'react-native-paper';
 import Svg, { Polyline, Line, Text as SvgText } from 'react-native-svg';
 import { COLORS } from '../../shared/colors';
 import { calculateVolatility } from '../../shared/calculations';
+import { runMonteCarlo } from '../../services/simulations/monteCarlo';
+import { runBridgewaterAnalysis } from '../../shared/bridgewaterAnalysis';
 
 const CARD_WIDTH = Dimensions.get('window').width - 32;
 const H = 200;
@@ -55,102 +57,64 @@ const fmtGain = (v, base) => {
 
 const MonteCarlo = ({ holdings = [], portfolioValue = 0, horizonYears = 1 }) => {
   const [runKey, setRunKey] = useState(0);
+  const [bwResults, setBwResults] = useState(null);
+  const [correlated, setCorrelated] = useState(true);
+  const [weightSource, setWeightSource] = useState('current'); // 'current' or 'bridgewater'
+  const [Npaths, setNpaths] = useState(1000);
 
   const results = useMemo(() => {
     if (!holdings.length || portfolioValue <= 0) return null;
-    const steps = Math.round(252 * horizonYears);
-    const dt = 1 / 252;
-
-    // Compute basic per-holding quantities robustly from holdings shape
-    const computedValues = holdings.map(h => {
+    // assemble assets for the service
+    const computed = holdings.map(h => {
       const quantity = Number(h.quantity) || 0;
       const currentPrice = Number(h.currentPrice ?? h.currentUnitPrice ?? h.price) || 0;
-      const purchasePrice = Number(h.purchasePrice ?? h.purchaseUnitPrice ?? h.costBasisUnit) || 0;
       const value = quantity * currentPrice;
-      const costBasis = quantity * purchasePrice;
-      return { ...h, quantity, currentPrice, purchasePrice, value, costBasis };
+      const cost = Number(h.costBasis ?? h.purchasePrice ?? h.purchaseUnitPrice) || 0;
+      const costTotal = quantity * (cost || 0);
+      const muAnnual = costTotal > 0 ? ((value - costTotal) / costTotal) * 100 : 0; // percent
+      return { S0: currentPrice, quantity, muAnnual, // sigmaAnnual left undefined - will use Bridgewater when available
+      };
     });
 
-    const totalHoldingsValue = computedValues.reduce((s, h) => s + (Number.isFinite(h.value) ? h.value : 0), 0);
+    // choose weights
+    const weights = weightSource === 'bridgewater' && bwResults && bwResults.assets ?
+      bwResults.assets.map(a => a.targetWeight ?? a.currentWeight) :
+      computed.map(c => (c.quantity * c.S0));
 
-    // ✅ Per-holding sigma derived from portfolio volatility base, scaled by weight
-    const sigmaBase = (calculateVolatility(holdings) || 18) / 100;
-    const metas = computedValues.map(h => {
-      const weight = totalHoldingsValue > 0 ? (h.value / totalHoldingsValue) : 0;
-      const mu = h.costBasis > 0 ? (h.value - h.costBasis) / h.costBasis : 0;
-      const sigma = sigmaBase * (0.6 + weight * 1.5);
-      const S0 = h.quantity > 0 ? (h.value / h.quantity) : (h.currentPrice || h.currentPrice === 0 ? h.currentPrice : h.value);
-      return { ...h, weight, mu, sigma, S0 };
-    });
+    // try to build assets with sigmaAnnual from bridgewater if available
+    const assets = computed.map((c, i) => ({
+      ...c,
+      sigmaAnnual: bwResults && bwResults.assets && bwResults.assets[i] ? (bwResults.assets[i].annualVolatility * 100) : undefined,
+    }));
 
-    const allPaths = new Array(N_PATHS);
-    const allFinal = new Array(N_PATHS);
-    const allMaxDd = new Array(N_PATHS);
+    // pass covDaily from bridgewater if available
+    const covDaily = bwResults && bwResults.covarianceMatrix ? bwResults.covarianceMatrix : null;
 
-    // pre-pick sample indices for ghost paths
-    const sampleIdxs = new Set();
-    while (sampleIdxs.size < SAMPLE) sampleIdxs.add(Math.floor(Math.random() * N_PATHS));
+    const sim = runMonteCarlo({ assets, N: Npaths, steps: Math.round(252 * horizonYears), correlated, covDaily, sampleCount: SAMPLE });
+    return sim;
+  }, [holdings, portfolioValue, horizonYears, runKey, bwResults, correlated, weightSource, Npaths]);
 
-    for (let p = 0; p < N_PATHS; p++) {
-      const prices = metas.map(h => h.S0);
-      const series = new Array(steps + 1);
-      series[0] = portfolioValue;
-
-      for (let t = 1; t <= steps; t++) {
-        let pv = 0;
-        for (let i = 0; i < metas.length; i++) {
-          const h = metas[i];
-          prices[i] *= Math.exp(
-            (h.mu - 0.5 * h.sigma * h.sigma) * dt +
-            h.sigma * Math.sqrt(dt) * gaussian()
-          );
-          pv += prices[i] * (h.quantity || 1);
-        }
-        // ✅ normalise back to portfolio value scale
-        series[t] = pv * (portfolioValue / series[0] || 1);
-        series[0] = portfolioValue; // anchor reset
-      }
-      // recalculate with proper anchoring
-      const prices2 = metas.map(h => h.S0);
-      series[0] = portfolioValue;
-      const denom = metas.reduce((s, h) => s + (Number.isFinite(h.S0) ? h.S0 * (h.quantity || 1) : 0), 0);
-      const scale = denom > 0 ? portfolioValue / denom : 1; // guard against zero denom
-      for (let t = 1; t <= steps; t++) {
-        let pv = 0;
-        for (let i = 0; i < metas.length; i++) {
-          const h = metas[i];
-          prices2[i] *= Math.exp(
-            (h.mu - 0.5 * h.sigma * h.sigma) * dt +
-            h.sigma * Math.sqrt(dt) * gaussian()
-          );
-          pv += prices2[i] * (h.quantity || 1);
-        }
-        series[t] = pv * scale;
-      }
-
-      allPaths[p] = series;
-      allFinal[p] = series[steps];
-      allMaxDd[p] = calcMaxDrawdown(series);
+  // fetch Bridgewater analysis (async) to obtain covariance and per-asset vols
+  React.useEffect(() => {
+    let mounted = true;
+    if (!holdings || holdings.length < 2) {
+      setBwResults(null);
+      return () => { mounted = false; };
     }
 
-    // Filter out non-finite final values before computing percentiles and metrics
-    const finiteFinals = allFinal.filter(v => Number.isFinite(v));
-    const finiteMaxDd = allMaxDd.filter(v => Number.isFinite(v));
-    const sortedFinal = finiteFinals.length ? [...finiteFinals].sort((a, b) => a - b) : [];
-    const p10 = sortedFinal.length ? percentileValue(sortedFinal, 10) : portfolioValue;
-    const p50 = sortedFinal.length ? percentileValue(sortedFinal, 50) : portfolioValue;
-    const p90 = sortedFinal.length ? percentileValue(sortedFinal, 90) : portfolioValue;
-    const probLoss = finiteFinals.length ? (finiteFinals.filter(v => v < portfolioValue).length / finiteFinals.length) * 100 : 0;
-    const avgMaxDd = finiteMaxDd.length ? (finiteMaxDd.reduce((s, v) => s + v, 0) / finiteMaxDd.length) * 100 : 0;
+    (async () => {
+      try {
+        const res = await runBridgewaterAnalysis(holdings, { lookbackDays: 252 });
+        if (mounted && res && res.success) {
+          setBwResults(res);
+        }
+      } catch (err) {
+        if (mounted) setBwResults(null);
+      }
+    })();
 
-    // ✅ Correct percentile paths — not paths[0], paths[mid], paths[last]
-    const pathP10 = percentilePath(allPaths, allFinal, 10) || Array(steps + 1).fill(portfolioValue);
-    const pathP50 = percentilePath(allPaths, allFinal, 50) || Array(steps + 1).fill(portfolioValue);
-    const pathP90 = percentilePath(allPaths, allFinal, 90) || Array(steps + 1).fill(portfolioValue);
-    const samplePaths = Array.from(sampleIdxs).map(i => allPaths[i] || Array(steps + 1).fill(portfolioValue));
-
-    return { samplePaths, pathP10, pathP50, pathP90, p10, p50, p90, probLoss, avgMaxDd, steps };
-  }, [holdings, portfolioValue, horizonYears, runKey]);
+    return () => { mounted = false; };
+  }, [holdings]);
 
   if (!results) return null;
   const { samplePaths, pathP10, pathP50, pathP90, p10, p50, p90, probLoss, avgMaxDd, steps } = results;

@@ -2,7 +2,7 @@
 
 **Investment Portfolio Tracking Application**
 
-A comprehensive React Native mobile application for tracking and analyzing investment portfolios. Built with Expo, Firebase, and modern mobile development best practices.
+A React Native mobile application for tracking and analyzing investment portfolios. Built with Expo and Firebase, with added local simulation and risk-analysis tools.
 
 ---
 
@@ -29,32 +29,28 @@ PortfolioIQ is a full-featured investment portfolio management app that allows u
 - **Search & Filter** - Find stocks with autocomplete search
 - **Sorting Options** - Sort holdings by symbol, price, quantity, etc.
 
-### 📊 Analytics Features
+### 📊 Analytics & Simulation Features
 - **Portfolio Growth Charts** - Visualize portfolio performance over time
 - **Allocation Analysis** - Pie charts showing holdings and asset type distribution
 - **Top/Bottom Performers** - Identify best and worst performing stocks
 - **Gain/Loss Tracking** - Monitor returns at individual and portfolio levels
-
-### 🛡️ Risk Management
-- **Beta Calculation** - Portfolio volatility vs. market
-- **Concentration Risk** - Analyze portfolio diversification
-- **Volatility Analysis** - Measure price fluctuation risk
-- **Diversification Score** - Overall portfolio health assessment
-- **Smart Recommendations** - Actionable insights for portfolio improvement
+- **Monte Carlo Simulation** - Simulate portfolio outcomes (GBM) with P10/P50/P90 summaries and drawdown estimates
+- **Bridgewater-style Analysis** - Covariance and risk-parity insights used to produce correlated Monte Carlo simulations
 
 ---
 
 ## 🛠️ Tech Stack
 
-- **Framework**: React Native 0.74.5 with Expo SDK 51
+- **Framework**: React Native with Expo
 - **Language**: JavaScript (ES6+)
-- **Navigation**: React Navigation 6 (Stack + Bottom Tabs)
-- **UI Library**: React Native Paper 5.12 (Material Design)
+- **Navigation**: React Navigation (Stack + Bottom Tabs)
+- **UI Library**: React Native Paper
 - **Backend**: Firebase (Auth + Firestore)
 - **State Management**: React Context API
+- **Charts / SVG**: react-native-svg (used for custom Monte Carlo plots)
 - **Charts**: React Native Chart Kit
 - **API Integration**: Axios + Yahoo Finance API
-- **Platform**: iOS & Android
+- **Local Simulation Engine**: Pure-JS Monte Carlo service (services/simulations/monteCarlo.js)
 
 ---
 
@@ -63,38 +59,44 @@ PortfolioIQ is a full-featured investment portfolio management app that allows u
 ```
 PortfolioIQ/
 ├── src/
-│   ├── screens/           # App screens (7 screens)
-│   │   ├── AuthScreen.js
+│   ├── screens/           # App screens
 │   │   ├── DashboardScreen.js
 │   │   ├── HoldingsScreen.js
 │   │   ├── AddHoldingScreen.js
 │   │   ├── AnalyticsScreen.js
 │   │   ├── RiskScreen.js
+│   │   ├── NotificationsScreen.js
 │   │   └── SettingsScreen.js
 │   ├── components/        # Reusable UI components
 │   │   ├── PortfolioCard.js
 │   │   ├── HoldingCard.js
-│   │   └── StockSearchBar.js
+│   │   ├── StockSearchBar.js
+│   │   ├── AIInsights.js
+│   │   └── MonteCarlo.js
 │   ├── navigation/        # Navigation configuration
 │   │   └── AppNavigator.js
-│   ├── context/          # React Context providers
+│   ├── context/           # React Context providers
 │   │   ├── AuthContext.js
-│   │   └── PortfolioContext.js
-│   ├── services/         # Business logic & API calls
+│   │   ├── PortfolioContext.js
+│   │   └── NotificationContext.js
+│   ├── services/          # Business logic & API calls
 │   │   ├── firebase.js
 │   │   ├── stockAPI.js
-│   │   └── calculations.js
-│   ├── utils/            # Helper functions & constants
-│   │   ├── helpers.js
-│   │   ├── constants.js
-│   │   └── theme.js
-│   └── config/           # Configuration files
+│   │   ├── calculations.js
+│   │   └── simulations/
+│   │       └── monteCarlo.js
+│   ├── shared/            # Shared utilities and analysis
+│   │   ├── bridgewaterAnalysis.js
+│   │   ├── colors.js
+│   │   └── helpers.js
+│   └── config/            # Configuration files
 │       └── firebase-config.template.js
-├── assets/              # Images, fonts, etc.
-├── App.js              # Root component
-├── app.json            # Expo configuration
-├── package.json        # Dependencies
-└── babel.config.js     # Babel configuration
+├── assets/                # Images, icons, fonts
+├── services/              # app-level services (ai, api, firebase helpers)
+├── App.js                 # Root component
+├── app.json               # Expo configuration
+├── package.json           # Dependencies
+└── babel.config.js        # Babel configuration
 ```
 
 ---
@@ -121,7 +123,7 @@ PortfolioIQ/
    npm install
    ```
 
-3. **Set up Firebase** (see [FIREBASE_SETUP.md](./FIREBASE_SETUP.md))
+3. **Set up Firebase** (see FIREBASE_SETUP.md)
    - Create Firebase project
    - Enable Authentication & Firestore
    - Copy `firebase-config.template.js` to `firebase-config.js`
@@ -137,169 +139,37 @@ PortfolioIQ/
    - Press `a` for Android Emulator
    - Scan QR code with Expo Go app
 
-For detailed setup instructions, see [QUICKSTART.md](./QUICKSTART.md)
-
 ---
 
-## 📖 Documentation
+## 📖 Developer Notes
 
-- **[QUICKSTART.md](./QUICKSTART.md)** - Complete setup guide with step-by-step instructions
-- **[FIREBASE_SETUP.md](./FIREBASE_SETUP.md)** - Firebase configuration guide
-- **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)** - Common issues and solutions
-- **[PROJECT_SUMMARY.md](./PROJECT_SUMMARY.md)** - Detailed project documentation
-- **[DOCUMENTATION_INDEX.md](./DOCUMENTATION_INDEX.md)** - Complete documentation index
-
----
-
-## 🎓 Educational Value
-
-This project demonstrates:
-
-### Software Engineering Concepts
-- **Clean Architecture** - Separation of concerns (UI, business logic, data)
-- **Component-Based Design** - Reusable, modular components
-- **State Management** - Context API for global state
-- **API Integration** - RESTful API consumption
-- **Error Handling** - Comprehensive error management
-- **Code Organization** - Scalable folder structure
-
-### Mobile Development
-- **Cross-Platform Development** - Single codebase for iOS/Android
-- **Responsive Design** - Adapts to different screen sizes
-- **Navigation Patterns** - Stack and tab navigation
-- **Touch Interactions** - Gestures, long press, pull-to-refresh
-- **Data Persistence** - Cloud storage with offline capabilities
-
-### Financial Technology
-- **Portfolio Mathematics** - Gains, losses, returns calculations
-- **Risk Metrics** - Beta, volatility, concentration analysis
-- **Data Visualization** - Charts and graphs for financial data
-- **Real-Time Data** - Live stock price integration
-
----
-
-## 🧮 Key Calculations
-
-The app implements various financial calculations:
-
-- **Portfolio Value** - Sum of all holding values
-- **Cost Basis** - Total purchase cost
-- **Gain/Loss** - Current value - Cost basis
-- **Return Percentage** - (Gain/Loss / Cost Basis) × 100
-- **Beta** - Portfolio volatility relative to market
-- **Volatility** - Standard deviation of returns
-- **Allocation %** - Each holding's % of total portfolio
-- **Diversification Score** - 0-100 scale based on distribution
-
----
-
-## 🔐 Security
-
-- **Firebase Authentication** - Secure user authentication
-- **Data Isolation** - Users can only access their own data
-- **Firestore Rules** - Server-side security rules (to be configured)
-- **API Key Protection** - Firebase keys configured securely
-- **Input Validation** - Client-side form validation
-
----
-
-## 🎨 Design Highlights
-
-- **Material Design 3** - Modern, accessible UI components
-- **Consistent Color Scheme** - Purple primary, teal accent
-- **Intuitive Icons** - Material Community Icons throughout
-- **Visual Feedback** - Loading states, animations, color-coded gains/losses
-- **Responsive Layout** - Works on phones and tablets
-
----
-
-## 📊 Data Models
-
-### User
-- uid, email, displayName, createdAt
-
-### Portfolio
-- id, userId, name, description, currency, type, createdAt, updatedAt
-
-### Holding
-- id, portfolioId, symbol, name, quantity, purchasePrice, currentPrice, purchaseDate, assetType, notes, lastUpdated
+- The Monte Carlo engine is implemented as a pure-JS service at `services/simulations/monteCarlo.js`. It supports correlated geometric Brownian motion (GBM) via a Cholesky decomposition of a covariance matrix produced by `shared/bridgewaterAnalysis.js`.
+- `src/components/MonteCarlo.js` consumes the service and renders percentile paths (P10/P50/P90), a small sample of ghost paths for visual context, and summary metrics such as probability of loss and average max drawdown. The component includes input sanitization to avoid NaN/invalid SVG coordinates.
+- `shared/bridgewaterAnalysis.js` now exposes covariance and returns matrices that can be used to drive correlated simulations and risk-parity weight calculations.
+- `src/components/AIInsights.js` includes fixes for the gauge visualization (prevents arc overflow when >50% and improves percent label spacing).
+- Rendering many simulated paths can be heavy on the JS/UI thread. The current approach samples a subset of paths for plotting; consider moving compute to a background worker or native module for larger runs.
 
 ---
 
 ## 🚧 Future Enhancements
 
-Potential features for expansion:
-
-- **Historical Data Charts** - Show actual price history from Yahoo Finance
-- **Watchlists** - Track stocks without purchasing
-- **News Integration** - Stock-specific news feeds
-- **Alerts** - Price alerts and notifications
-- **Export/Import** - CSV export of portfolio data
-- **Dark Mode** - Theme switching
-- **Biometric Auth** - Face ID / Touch ID
-- **Dividend Tracking** - Track dividend income
-- **Tax Reports** - Capital gains calculations
+- **Offload Simulation Compute** - Move heavy Monte Carlo runs to a background worker or native module to avoid UI blocking
+- **Percentile-band Rendering** - Replace full 1,000-path overlays with shaded P10–P90 bands + a small sampled set of paths for performance
+- **Unit Tests for Simulation** - Add deterministic, seedable tests for the Monte Carlo engine and compare against analytic expectations for small N
+- **UI Controls** - Expose controls for number of paths, horizon, correlated toggle, and weight source (current vs Bridgewater)
+- **Historical Backtesting** - Validate simulation parameters and interpretability against historical bootstraps
 
 ---
 
 ## 🤝 Contributing
 
-This is an educational project. Contributions, issues, and feature requests are welcome!
+Contributions, issues, and feature requests are welcome. See CONTRIBUTING.md if present.
 
 ---
 
 ## 📄 License
 
-MIT License - See [LICENSE](./LICENSE) file for details
-
----
-
-## 👨‍💻 Author
-
-Created as a Computer Science Capstone Project
-
----
-
-## 🙏 Acknowledgments
-
-- **Expo Team** - For the excellent React Native framework
-- **Firebase** - For backend infrastructure
-- **Yahoo Finance** - For stock market data
-- **React Native Community** - For amazing libraries and support
-
----
-
-## 📞 Support
-
-For issues or questions:
-
-1. Check [TROUBLESHOOTING.md](./TROUBLESHOOTING.md)
-2. Review [DOCUMENTATION_INDEX.md](./DOCUMENTATION_INDEX.md)
-3. Check Firebase console for backend issues
-
----
-
-## ⚡ Quick Commands
-
-```bash
-# Install dependencies
-npm install
-
-# Start development server
-npx expo start
-
-# Run on iOS
-npx expo start --ios
-
-# Run on Android
-npx expo start --android
-
-# Run tests (if configured)
-npm test
-
-# Clear cache
-npx expo start -c
-```
+MIT License - See LICENSE file for details
 
 ---
 

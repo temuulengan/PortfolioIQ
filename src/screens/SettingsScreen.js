@@ -16,7 +16,7 @@ import {
 import { COLORS } from '../../shared/colors';
 import { AuthContext } from '../context/AuthContext';
 import { Switch, Button, Dialog, Portal, TextInput } from 'react-native-paper';
-import { getUserProfile, updateUserProfile, updateAuthProfile } from '../../services/firebase';
+import { getUserProfile, updateUserProfile, updateAuthProfile } from '../services/firebase';
 
 const SettingsScreen = () => {
   const { user, logout, resetPassword } = useContext(AuthContext);

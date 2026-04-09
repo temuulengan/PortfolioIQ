@@ -42,7 +42,9 @@ const DashboardScreen = ({ navigation }) => {
     selectedPortfolio,
     holdings,
     loading,
+    isLoadingHoldings,
     refreshing,
+    isRefreshingPrices,
     loadPortfolios,
     refreshPrices,
   } = useContext(PortfolioContext);
@@ -53,23 +55,23 @@ const DashboardScreen = ({ navigation }) => {
     loadPortfolios();
   }, []);
   
-  // Check for milestones when total value changes
-  const totalValue = calculatePortfolioValue(holdings);
-  
+  // Check for milestones when total value changes (only when holdings finished loading)
+  const totalValue = isLoadingHoldings ? null : calculatePortfolioValue(holdings);
+  const previousTotalRef = React.useRef(null);
   useEffect(() => {
-    if (totalValue > 0 && previousValue !== null && previousValue !== totalValue) {
-      checkMilestones(totalValue, previousValue);
+    if (!isLoadingHoldings && Number.isFinite(totalValue) && previousTotalRef.current !== null && previousTotalRef.current !== totalValue) {
+      checkMilestones(totalValue, previousTotalRef.current);
     }
-    setPreviousValue(totalValue);
-  }, [totalValue]);
+    if (!isLoadingHoldings) previousTotalRef.current = totalValue;
+  }, [isLoadingHoldings, totalValue]);
 
   const handleRefresh = async () => {
     await Promise.all([loadPortfolios(), refreshPrices()]);
   };
 
-  const costBasis = calculatePortfolioCostBasis(holdings);
-  const gainLoss = calculatePortfolioGainLoss(holdings);
-  const gainLossPercent = holdings.length > 0 ? calculatePortfolioGainLossPercent(holdings) : 0;
+  const costBasis = isLoadingHoldings ? null : calculatePortfolioCostBasis(holdings);
+  const gainLoss = isLoadingHoldings ? null : calculatePortfolioGainLoss(holdings);
+  const gainLossPercent = (!isLoadingHoldings && holdings.length > 0) ? calculatePortfolioGainLossPercent(holdings) : 0;
   const isPositive = gainLoss >= 0;
 
   const topPerformers = getTopPerformers(holdings, 3);
@@ -117,7 +119,7 @@ const DashboardScreen = ({ navigation }) => {
               <View style={styles.valueContainer}>
                 <Text style={styles.valueLabel}>Total Value</Text>
                 <Text style={styles.valueAmount}>
-                  {formatCurrency(totalValue, selectedPortfolio.currency)}
+                  {isLoadingHoldings ? '—' : formatCurrency(totalValue, selectedPortfolio.currency)}
                 </Text>
               </View>
 
@@ -125,7 +127,7 @@ const DashboardScreen = ({ navigation }) => {
                 <View style={styles.statItem}>
                   <Text style={styles.statLabel}>Cost Basis</Text>
                   <Text style={styles.statValue}>
-                    {formatCurrency(costBasis, selectedPortfolio.currency)}
+                    {isLoadingHoldings ? '—' : formatCurrency(costBasis, selectedPortfolio.currency)}
                   </Text>
                 </View>
                 
@@ -143,7 +145,7 @@ const DashboardScreen = ({ navigation }) => {
                         { color: getGainLossColor(isPositive) },
                       ]}
                     >
-                      {formatCurrency(gainLoss, selectedPortfolio.currency)}
+                      {isLoadingHoldings ? '—' : formatCurrency(gainLoss, selectedPortfolio.currency)}
                     </Text>
                   </View>
                   <Text
@@ -152,7 +154,7 @@ const DashboardScreen = ({ navigation }) => {
                       { color: getGainLossColor(isPositive) },
                     ]}
                   >
-                    {formatPercent(gainLossPercent)}
+                    {isLoadingHoldings ? '—' : formatPercent(gainLossPercent)}
                   </Text>
                 </View>
               </View>
@@ -165,7 +167,7 @@ const DashboardScreen = ({ navigation }) => {
                     <MaterialCommunityIcons name="briefcase" size={16} color={COLORS.primary} />
                   )}
                 >
-                  {holdings.length} Holdings
+                  {isLoadingHoldings ? '—' : `${holdings.length} Holdings`}
                 </Chip>
                 <Chip
                   style={styles.chip}

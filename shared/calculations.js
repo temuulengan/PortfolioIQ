@@ -7,8 +7,13 @@
 /**
  * Calculate total value of a holding
  */
-export const calculateHoldingValue = (quantity, currentPrice) => {
-  return quantity * currentPrice;
+export const calculateHoldingValue = (quantity, currentPrice, purchasePrice = 0, holdingId = null) => {
+  // Use currentPrice when available and finite; otherwise fall back to purchasePrice.
+  const usePrice = Number.isFinite(currentPrice) ? currentPrice : (Number.isFinite(purchasePrice) ? purchasePrice : 0);
+  if (!Number.isFinite(currentPrice) && Number.isFinite(purchasePrice)) {
+    console.warn(`Holding ${holdingId || ''} missing currentPrice; falling back to purchasePrice in value calc.`);
+  }
+  return quantity * usePrice;
 };
 
 /**
@@ -23,7 +28,7 @@ export const calculateCostBasis = (quantity, purchasePrice) => {
  */
 export const calculateGainLoss = (quantity, purchasePrice, currentPrice) => {
   const costBasis = calculateCostBasis(quantity, purchasePrice);
-  const currentValue = calculateHoldingValue(quantity, currentPrice);
+  const currentValue = calculateHoldingValue(quantity, currentPrice, purchasePrice);
   return currentValue - costBasis;
 };
 
@@ -55,7 +60,7 @@ export const calculateDayChangePercent = (previousClose, currentPrice) => {
  */
 export const calculatePortfolioValue = (holdings) => {
   return holdings.reduce((total, holding) => {
-    return total + calculateHoldingValue(holding.quantity, holding.currentPrice);
+    return total + calculateHoldingValue(holding.quantity, holding.currentPrice, holding.purchasePrice, holding.id);
   }, 0);
 };
 
@@ -91,8 +96,9 @@ export const calculatePortfolioGainLossPercent = (holdings) => {
  */
 export const calculatePortfolioDayChange = (holdings) => {
   return holdings.reduce((total, holding) => {
-    const previousClose = holding.currentPrice / (1 + (holding.dayChangePercent || 0) / 100);
-    return total + calculateDayChange(holding.quantity, previousClose, holding.currentPrice);
+    const prevClose = Number.isFinite(holding.currentPrice) ? (holding.currentPrice / (1 + (holding.dayChangePercent || 0) / 100)) : holding.previousClose || holding.purchasePrice || 0;
+    const current = Number.isFinite(holding.currentPrice) ? holding.currentPrice : (holding.purchasePrice || 0);
+    return total + calculateDayChange(holding.quantity, prevClose, current);
   }, 0);
 };
 
@@ -103,9 +109,11 @@ export const calculatePortfolioDayChange = (holdings) => {
  */
 export const calculateAllocation = (holdings) => {
   const totalValue = calculatePortfolioValue(holdings);
-  
+  if (!Number.isFinite(totalValue) || totalValue === 0) {
+    return holdings.map(holding => ({ ...holding, allocationPercent: 0, value: calculateHoldingValue(holding.quantity, holding.currentPrice, holding.purchasePrice, holding.id) }));
+  }
   return holdings.map(holding => {
-    const holdingValue = calculateHoldingValue(holding.quantity, holding.currentPrice);
+    const holdingValue = calculateHoldingValue(holding.quantity, holding.currentPrice, holding.purchasePrice, holding.id);
     return {
       ...holding,
       allocationPercent: (holdingValue / totalValue) * 100,
@@ -123,7 +131,7 @@ export const calculateAssetTypeAllocation = (holdings) => {
 
   holdings.forEach(holding => {
     const type = holding.assetType || 'stock';
-    const value = calculateHoldingValue(holding.quantity, holding.currentPrice);
+    const value = calculateHoldingValue(holding.quantity, holding.currentPrice, holding.purchasePrice, holding.id);
     
     if (!typeGroups[type]) {
       typeGroups[type] = {
@@ -152,7 +160,7 @@ export const calculateSectorAllocation = (holdings) => {
 
   holdings.forEach(holding => {
     const sector = holding.sector || 'Unknown';
-    const value = calculateHoldingValue(holding.quantity, holding.currentPrice);
+    const value = calculateHoldingValue(holding.quantity, holding.currentPrice, holding.purchasePrice, holding.id);
     
     if (!sectorGroups[sector]) {
       sectorGroups[sector] = {
@@ -231,7 +239,7 @@ export const calculatePortfolioBeta = (holdings) => {
   const totalValue = calculatePortfolioValue(holdings);
   
   return holdings.reduce((weightedBeta, holding) => {
-    const weight = calculateHoldingValue(holding.quantity, holding.currentPrice) / totalValue;
+    const weight = calculateHoldingValue(holding.quantity, holding.currentPrice, holding.purchasePrice, holding.id) / totalValue;
     const beta = holding.beta || 1.0; // Default to market beta
     return weightedBeta + (weight * beta);
   }, 0);

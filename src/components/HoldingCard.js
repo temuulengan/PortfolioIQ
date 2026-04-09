@@ -11,7 +11,7 @@ import {
 import { COLORS, Spacing } from '../../shared/colors';
 
 const HoldingCard = ({ holding, onPress, onLongPress }) => {
-  const currentValue = calculateHoldingValue(holding.quantity, holding.currentPrice);
+  const currentValue = calculateHoldingValue(holding.quantity, holding.currentPrice, holding.purchasePrice, holding.id);
   const costBasis = calculateCostBasis(holding.quantity, holding.purchasePrice);
   const gainLoss = calculateGainLoss(holding.quantity, holding.purchasePrice, holding.currentPrice);
   const gainLossPercent = calculateGainLossPercent(holding.purchasePrice, holding.currentPrice);

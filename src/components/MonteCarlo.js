@@ -1,33 +1,26 @@
-import React, { useMemo, useState, useCallback } from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
-import { Card, Text, Button, TextInput } from 'react-native-paper';
-import Svg, { Polyline, Polygon, Line, Text as SvgText } from 'react-native-svg';
+import React, { useState } from 'react';
+import { View, StyleSheet, Dimensions, TouchableOpacity, ScrollView } from 'react-native';
+import { Card, Text, ActivityIndicator } from 'react-native-paper';
+import Svg, { Polyline, Polygon, Line, Text as SvgText, Circle } from 'react-native-svg';
 import { COLORS } from '../../shared/colors';
-import { calculateVolatility } from '../../shared/calculations';
-import { runMonteCarlo, runMonteCarloAsync } from '../../services/simulations/monteCarlo';
+import { runMonteCarloAsync } from '../../services/simulations/monteCarlo';
 import { runBridgewaterAnalysis } from '../../shared/bridgewaterAnalysis';
-import { ActivityIndicator } from 'react-native-paper';
 
+// ─── Layout constants ────────────────────────────────────────────────────────
 const CARD_WIDTH = Dimensions.get('window').width - 32;
-const H = 200;
-const PAD = { l: 48, r: 12, t: 8, b: 28 };
+const H = 260;
+const PAD = { l: 52, r: 16, t: 12, b: 32 };
 const CW = CARD_WIDTH - PAD.l - PAD.r;
 const CH = H - PAD.t - PAD.b;
-const N_PATHS = 1000;
-const SAMPLE = 80;
+const SAMPLE = 60;
 
-const gaussian = () => {
-  const u1 = Math.random(), u2 = Math.random();
-  return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-};
-
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 const percentileValue = (sorted, p) => {
   const idx = Math.max(0, Math.min(sorted.length - 1,
     Math.round((p / 100) * (sorted.length - 1))));
   return sorted[idx];
 };
 
-// ✅ Find the actual path whose final value is closest to the percentile target
 const percentilePath = (allPaths, allFinal, p) => {
   const sorted = [...allFinal].sort((a, b) => a - b);
   const target = percentileValue(sorted, p);
@@ -39,67 +32,174 @@ const percentilePath = (allPaths, allFinal, p) => {
   return allPaths[bestIdx];
 };
 
-const calcMaxDrawdown = (series) => {
-  let peak = -Infinity, maxDd = 0;
-  for (let i = 0; i < series.length; i++) {
-    if (series[i] > peak) peak = series[i];
-    const dd = peak > 0 ? (peak - series[i]) / peak : 0;
-    if (dd > maxDd) maxDd = dd;
-  }
-  return maxDd;
+const fmt = (v) => {
+  if (v >= 1_000_000) return '$' + (v / 1_000_000).toFixed(2) + 'M';
+  if (v >= 1_000) return '$' + Math.round(v).toLocaleString();
+  return '$' + Math.round(v);
 };
 
-const fmt = (v) => '$' + Math.round(v).toLocaleString();
-const fmtPct = (v) => v.toFixed(1) + '%';
-const fmtGain = (v, base) => {
-  const pct = ((v - base) / base * 100).toFixed(1);
-  return (pct >= 0 ? '+' : '') + pct + '%';
+const fmtTick = (v) => {
+  if (Math.abs(v) >= 1_000_000) return '$' + (v / 1_000_000).toFixed(1) + 'M';
+  if (Math.abs(v) >= 10_000) return '$' + Math.round(v / 1000) + 'k';
+  if (Math.abs(v) >= 1_000) return '$' + (v / 1000).toFixed(1) + 'k';
+  return '$' + Math.round(v);
 };
 
+const fmtPct = (v) => (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
+const gainPct = (v, base) => base > 0 ? ((v - base) / base) * 100 : 0;
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+// Pill-style toggle button
+const ToggleChip = ({ label, active, onPress, color }) => (
+  <TouchableOpacity
+    onPress={onPress}
+    style={[
+      chipStyles.chip,
+      active && { backgroundColor: color || '#1a1a1a', borderColor: color || '#1a1a1a' },
+    ]}
+    activeOpacity={0.7}
+  >
+    <Text style={[chipStyles.label, active && chipStyles.labelActive]}>{label}</Text>
+  </TouchableOpacity>
+);
+
+const chipStyles = StyleSheet.create({
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: 'transparent',
+  },
+  label: { fontSize: 12, fontWeight: '500', color: '#6B7280' },
+  labelActive: { color: '#FFFFFF' },
+});
+
+// Scenario outcome card
+const ScenarioCard = ({ label, value, pct, accentColor, isMiddle }) => (
+  <View style={[scenarioStyles.card, isMiddle && scenarioStyles.middle]}>
+    <View style={[scenarioStyles.dot, { backgroundColor: accentColor }]} />
+    <Text style={scenarioStyles.label}>{label}</Text>
+    <Text style={[scenarioStyles.value, { color: accentColor }]}>{value}</Text>
+    <Text style={[scenarioStyles.pct, { color: pct >= 0 ? '#10B981' : '#EF4444' }]}>
+      {fmtPct(pct)}
+    </Text>
+  </View>
+);
+
+const scenarioStyles = StyleSheet.create({
+  card: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+  },
+  middle: {
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E7EB',
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginBottom: 6,
+  },
+  label: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#9CA3AF',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  value: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  pct: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+});
+
+// Stat row item
+const StatItem = ({ label, value, valueColor }) => (
+  <View style={statStyles.item}>
+    <Text style={statStyles.label}>{label}</Text>
+    <Text style={[statStyles.value, valueColor && { color: valueColor }]}>{value}</Text>
+  </View>
+);
+
+const statStyles = StyleSheet.create({
+  item: { flex: 1, alignItems: 'center' },
+  label: { fontSize: 10, color: '#9CA3AF', fontWeight: '500', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 3 },
+  value: { fontSize: 13, fontWeight: '700', color: '#111827' },
+});
+
+// ─── Main component ───────────────────────────────────────────────────────────
 const MonteCarlo = ({ holdings = [], portfolioValue = 0, horizonYears = 1 }) => {
   const [runKey, setRunKey] = useState(0);
   const [bwResults, setBwResults] = useState(null);
   const [correlated, setCorrelated] = useState(true);
-  const [weightSource, setWeightSource] = useState('current'); // 'current' or 'bridgewater'
   const [Npaths, setNpaths] = useState(1000);
-  const [dist, setDist] = useState('normal'); // 'normal' or 'student'
-  const [studentDf, setStudentDf] = useState(5);
-  const [shrinkageAlpha, setShrinkageAlpha] = useState(0.1);
-
+  const [dist, setDist] = useState('normal');
+  const [studentDf] = useState(5);
+  const [shrinkageAlpha] = useState(0.1);
+  const [horizon, setHorizon] = useState(horizonYears);
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  // ── Bridgewater analysis ──────────────────────────────────────────────────
   React.useEffect(() => {
     let mounted = true;
-    if (!holdings.length || portfolioValue <= 0) {
-      setResults(null);
-      setLoading(false);
-      return () => { mounted = false; };
-    }
+    if (!holdings || holdings.length < 2) { setBwResults(null); return () => { mounted = false; }; }
+    (async () => {
+      try {
+        const res = await runBridgewaterAnalysis(holdings, { lookbackDays: 252 });
+        if (mounted && res?.success) setBwResults(res);
+      } catch { if (mounted) setBwResults(null); }
+    })();
+    return () => { mounted = false; };
+  }, [holdings]);
 
-    // assemble assets for the service
-    const computed = holdings.map(h => {
+  // ── Simulation ────────────────────────────────────────────────────────────
+  React.useEffect(() => {
+    let mounted = true;
+    if (!holdings.length || portfolioValue <= 0) { setResults(null); setLoading(false); return () => { mounted = false; }; }
+
+    const assets = holdings.map((h, i) => {
       const quantity = Number(h.quantity) || 0;
       const currentPrice = Number(h.currentPrice ?? h.currentUnitPrice ?? h.price) || 0;
       const value = quantity * currentPrice;
       const cost = Number(h.costBasis ?? h.purchasePrice ?? h.purchaseUnitPrice) || 0;
       const costTotal = quantity * (cost || 0);
-      const muAnnual = costTotal > 0 ? ((value - costTotal) / costTotal) * 100 : 0; // percent
-      return { S0: currentPrice, quantity, muAnnual };
+      const rawMu = costTotal > 0 ? ((value - costTotal) / costTotal) * 100 : 8;
+      const muAnnual = Math.max(-40, Math.min(40, rawMu));
+      const sigmaAnnual = bwResults?.assets?.[i]
+        ? bwResults.assets[i].annualVolatility * 100
+        : 25;
+      return { S0: currentPrice, quantity, muAnnual, sigmaAnnual };
     });
 
-    const assets = computed.map((c, i) => ({
-      ...c,
-      sigmaAnnual: bwResults && bwResults.assets && bwResults.assets[i] ? (bwResults.assets[i].annualVolatility * 100) : undefined,
-    }));
-
-    const covDaily = bwResults && bwResults.covarianceMatrix ? bwResults.covarianceMatrix : null;
-
+    const covDaily = bwResults?.covarianceMatrix ?? null;
     setLoading(true);
-    const args = { assets, N: Npaths, steps: Math.round(252 * horizonYears), correlated, covDaily, sampleCount: SAMPLE, dist, studentDf, shrinkageAlpha };
     let cancelled = false;
 
-    runMonteCarloAsync(args).then((sim) => {
+    runMonteCarloAsync({
+      assets,
+      N: Npaths,
+      steps: Math.round(252 * horizon),
+      correlated,
+      covDaily,
+      sampleCount: SAMPLE,
+      dist,
+      studentDf,
+      shrinkageAlpha,
+    }).then((sim) => {
       if (!mounted || cancelled) return;
       setResults(sim);
       setLoading(false);
@@ -110,48 +210,22 @@ const MonteCarlo = ({ holdings = [], portfolioValue = 0, horizonYears = 1 }) => 
     });
 
     return () => { mounted = false; cancelled = true; };
-  }, [holdings, portfolioValue, horizonYears, runKey, bwResults, correlated, weightSource, Npaths]);
+  }, [holdings, portfolioValue, horizon, runKey, bwResults, correlated, Npaths, dist]);
 
-  // fetch Bridgewater analysis (async) to obtain covariance and per-asset vols
-  React.useEffect(() => {
-    let mounted = true;
-    if (!holdings || holdings.length < 2) {
-      setBwResults(null);
-      return () => { mounted = false; };
-    }
-
-    (async () => {
-      try {
-        const res = await runBridgewaterAnalysis(holdings, { lookbackDays: 252 });
-        if (mounted && res && res.success) {
-          setBwResults(res);
-        }
-      } catch (err) {
-        if (mounted) setBwResults(null);
-      }
-    })();
-
-    return () => { mounted = false; };
-  }, [holdings]);
-
+  // ── Loading state ─────────────────────────────────────────────────────────
   if (!results && loading) {
     return (
       <View style={styles.container}>
-        <Card style={styles.card}>
-          <Card.Content>
-            <View style={styles.headerRow}>
+        <Card style={styles.card} elevation={0}>
+          <Card.Content style={styles.content}>
+            <View style={styles.loadingRow}>
               <View>
-                <Text style={styles.title}>Monte Carlo</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <ActivityIndicator animating={true} size={18} />
-                  <Text style={styles.subtitle}>Simulating…</Text>
-                </View>
+                <Text style={styles.title}>Simulation</Text>
+                <Text style={styles.subtitle}>Running {Npaths.toLocaleString()} paths…</Text>
               </View>
-              <Button mode="outlined" compact onPress={() => setRunKey(k => k + 1)}
-                style={styles.runBtn} labelStyle={styles.runBtnLabel}>
-                Re-run
-              </Button>
+              <ActivityIndicator animating size={20} color="#111827" />
             </View>
+            <View style={styles.loadingChart} />
           </Card.Content>
         </Card>
       </View>
@@ -162,254 +236,447 @@ const MonteCarlo = ({ holdings = [], portfolioValue = 0, horizonYears = 1 }) => 
 
   const { samplePaths, pathP10, pathP50, pathP90, p10, p50, p90, probLoss, avgMaxDd, steps, cvar95 } = results;
 
-  // chart scale
-  const allFlat = [...pathP10, ...pathP50, ...pathP90];
-  samplePaths.forEach(s => allFlat.push(...s));
-  let minV = allFlat[0], maxV = allFlat[0];
-  for (let i = 1; i < allFlat.length; i++) {
-    if (allFlat[i] < minV) minV = allFlat[i];
-    if (allFlat[i] > maxV) maxV = allFlat[i];
-  }
-  const vPad = (maxV - minV) * 0.05;
+  // ── Chart scale ───────────────────────────────────────────────────────────
+  const allFlat = [...(pathP10 || []), ...(pathP50 || []), ...(pathP90 || [])];
+  samplePaths?.forEach(s => s && allFlat.push(...s));
+  const finiteVals = allFlat.filter(Number.isFinite);
+  let minV = Math.min(...finiteVals);
+  let maxV = Math.max(...finiteVals);
+  const vPad = (maxV - minV) * 0.08;
   minV -= vPad; maxV += vPad;
-  // Guard against degenerate range (all values equal) which yields division by zero
-  if (!(maxV > minV)) {
-    maxV = minV + 1;
-  }
+  if (!(maxV > minV)) maxV = minV + 1;
 
   const mx = i => PAD.l + (i / steps) * CW;
   const my = v => H - PAD.b - ((v - minV) / (maxV - minV)) * CH;
-  const sanitizeSeries = (series) => {
-    if (!series || !series.length) return null;
+
+  const sanitize = (series) => {
+    if (!series?.length) return null;
     const out = [];
     let last = portfolioValue;
-    for (let i = 0; i < series.length; i++) {
-      const v = series[i];
-      if (Number.isFinite(v)) {
-        out.push(v);
-        last = v;
-      } else {
-        out.push(last);
-      }
+    for (const v of series) {
+      if (Number.isFinite(v)) { out.push(v); last = v; }
+      else out.push(last);
     }
     return out;
   };
 
   const pts = (series) => {
-    const s = sanitizeSeries(series);
+    const s = sanitize(series);
     if (!s) return null;
     return s.map((v, i) => `${mx(i).toFixed(1)},${my(v).toFixed(1)}`).join(' ');
   };
 
   const yTicks = [0, 0.25, 0.5, 0.75, 1].map(t => minV + (maxV - minV) * t);
-  const xTicks = Array.from({ length: horizonYears + 1 }, (_, i) => i);
+  const xTicks = Array.from({ length: horizon + 1 }, (_, i) => i);
 
-  const lossColor = probLoss > 40 ? COLORS.error : probLoss > 20 ? COLORS.warning : COLORS.success;
-  const ddColor = avgMaxDd > 20 ? COLORS.error : avgMaxDd > 10 ? COLORS.warning : COLORS.success;
+  // Reference line (starting portfolio value)
+  const refY = my(portfolioValue);
+  const showRef = refY > PAD.t && refY < H - PAD.b;
+
+  // Colors
+  const lossColor = probLoss > 40 ? '#EF4444' : probLoss > 20 ? '#F59E0B' : '#10B981';
+  const ddColor = avgMaxDd > 20 ? '#EF4444' : avgMaxDd > 10 ? '#F59E0B' : '#10B981';
+
+  // Band polygon
+  const bandPolygon = (() => {
+    const up = sanitize(pathP90) || [];
+    const dn = (sanitize(pathP10) || []).slice().reverse();
+    if (!up.length || up.length !== dn.length) return null;
+    return up.map((v, i) => `${mx(i)},${my(v)}`).concat(
+      dn.map((v, i) => `${mx(up.length - 1 - i)},${my(v)}`)
+    ).join(' ');
+  })();
 
   return (
     <View style={styles.container}>
-      <Card style={styles.card}>
-        <Card.Content>
+      <Card style={styles.card} elevation={0}>
+        <Card.Content style={styles.content}>
+
+          {/* ── Header ── */}
           <View style={styles.headerRow}>
             <View>
               <Text style={styles.title}>Monte Carlo</Text>
-              <Text style={styles.subtitle}>{Npaths.toLocaleString()} simulated paths · {horizonYears}yr horizon</Text>
-            </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 6 }}>
-                <Button mode={dist === 'normal' ? 'contained' : 'outlined'} compact onPress={() => setDist('normal')}>
-                  Normal
-                </Button>
-                <Button mode={dist === 'student' ? 'contained' : 'outlined'} compact onPress={() => setDist('student')}>
-                  Student-t
-                </Button>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                {dist === 'student' && (
-                  <Text style={{ fontSize: 12, color: COLORS.textSecondary, marginRight: 8 }}>df: {studentDf}</Text>
-                )}
-                <Button mode="outlined" compact onPress={() => setRunKey(k => k + 1)}
-                  style={styles.runBtn} labelStyle={styles.runBtnLabel}>
-                  Re-run
-                </Button>
-              </View>
-            </View>
-          </View>
-
-          {/* Controls */}
-          <View style={styles.controlsRow}>
-            <View style={styles.controlsLeft}>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                {[100, 1000, 5000].map(v => (
-                  <Button key={v} mode={Npaths === v ? 'contained' : 'outlined'} compact onPress={() => setNpaths(v)}>
-                    {v.toLocaleString()}
-                  </Button>
-                ))}
-              </View>
-              <View style={{ flexDirection: 'row', marginTop: 8, gap: 8, alignItems: 'center' }}>
-                <Button mode={correlated ? 'contained' : 'outlined'} compact onPress={() => setCorrelated(c => !c)}>
-                  {correlated ? 'Correlated' : 'Independent'}
-                </Button>
-                <TextInput style={styles.smallInput} label="Shrinkage" value={String(shrinkageAlpha)} onChangeText={t => setShrinkageAlpha(Math.max(0, Math.min(1, Number(t) || 0)))} keyboardType="numeric" dense />
-                {dist === 'student' && (
-                  <TextInput style={styles.smallInput} label="df" value={String(studentDf)} onChangeText={t => setStudentDf(Math.max(1, Number(t) || 1))} keyboardType="numeric" dense />
-                )}
-              </View>
-            </View>
-            <View style={styles.controlsRight}>
-              <View style={{ flexDirection: 'row' }}>
-                <Button mode={dist === 'normal' ? 'contained' : 'outlined'} compact onPress={() => setDist('normal')}>Normal</Button>
-                <Button mode={dist === 'student' ? 'contained' : 'outlined'} compact onPress={() => setDist('student')}>Student-t</Button>
-              </View>
-              <Button mode="outlined" compact onPress={() => setRunKey(k => k + 1)} style={styles.runBtn} labelStyle={styles.runBtnLabel}>Re-run</Button>
-            </View>
-          </View>
-
-          {/* Legend */}
-          <View style={styles.legend}>
-            {[['P90 optimistic','#1D9E75'],['P50 median',COLORS.textPrimary],['P10 pessimistic','#E24B4A']].map(([l,c]) => (
-              <View key={l} style={styles.legItem}>
-                <View style={[styles.legLine, { backgroundColor: c }]} />
-                <Text style={styles.legText}>{l}</Text>
-              </View>
-            ))}
-          </View>
-
-          {/* Chart */}
-          <Svg width={CARD_WIDTH} height={H}>
-            {/* y gridlines + labels */}
-            {yTicks.map((v, i) => (
-              <React.Fragment key={i}>
-                <Line x1={PAD.l} y1={my(v)} x2={CARD_WIDTH - PAD.r} y2={my(v)}
-                  stroke={COLORS.border} strokeWidth={0.5} />
-                <SvgText x={PAD.l - 4} y={my(v) + 4}
-                  textAnchor="end" fontSize={9} fill={COLORS.textSecondary}
-                  fontFamily="System">
-                  {'$' + Math.round(v / 1000) + 'k'}
-                </SvgText>
-              </React.Fragment>
-            ))}
-            {/* x labels */}
-            {xTicks.map(i => (
-              <SvgText key={i} x={mx(Math.round((i / horizonYears) * steps))}
-                y={H - PAD.b + 14} textAnchor="middle" fontSize={9}
-                fill={COLORS.textSecondary} fontFamily="System">
-                {i === 0 ? 'Now' : `${i}yr`}
-              </SvgText>
-            ))}
-            {/* ghost paths */}
-            {samplePaths.filter(Boolean).map((s, i) => {
-              const p = pts(s || []);
-              if (!p) return null;
-              return <Polyline key={i} points={p} fill="none"
-                stroke="#888780" strokeWidth={0.5} strokeOpacity={0.1} />;
-            })}
-            {/* percentile band (P10-P90) */}
-            {pathP10 && pathP90 && (() => {
-              const up = sanitizeSeries(pathP90) || [];
-              const down = (sanitizeSeries(pathP10) || []).slice().reverse();
-              if (up.length && down.length && up.length === down.length) {
-                const points = up.map((v, i) => `${mx(i)},${my(v)}`).concat(down.map((v, i) => `${mx(up.length - 1 - i)},${my(v)}`)).join(' ');
-                return <Polygon points={points} fill="#E24B4A" fillOpacity={0.06} stroke="none" />;
-              }
-              return null;
-            })()}
-            {/* percentile paths */}
-            <Polyline points={pts(pathP10)} fill="none" stroke="#E24B4A" strokeWidth={2} />
-            <Polyline points={pts(pathP50)} fill="none" stroke={COLORS.textPrimary} strokeWidth={2} />
-            <Polyline points={pts(pathP90)} fill="none" stroke="#1D9E75" strokeWidth={2} />
-            {/* axes */}
-            <Line x1={PAD.l} y1={H - PAD.b} x2={CARD_WIDTH - PAD.r} y2={H - PAD.b}
-              stroke={COLORS.border} strokeWidth={1} />
-            <Line x1={PAD.l} y1={PAD.t} x2={PAD.l} y2={H - PAD.b}
-              stroke={COLORS.border} strokeWidth={1} />
-          </Svg>
-
-          {/* P10 / P50 / P90 summary — matches AIInsights healthCard style */}
-          <View style={styles.healthCard}>
-            <View style={styles.gridItem}>
-              <Text style={styles.gridLabel}>P10</Text>
-              <Text style={[styles.gridValue, { color: '#E24B4A' }]}>{fmt(p10)}</Text>
-              <Text style={[styles.gridSub, { color: '#E24B4A' }]}>{fmtGain(p10, portfolioValue)}</Text>
-            </View>
-            <View style={[styles.gridItem, styles.gridMiddle]}>
-              <Text style={styles.gridLabel}>P50</Text>
-              <Text style={styles.gridValue}>{fmt(p50)}</Text>
-              <Text style={[styles.gridSub, { color: p50 >= portfolioValue ? '#1D9E75' : '#E24B4A' }]}>
-                {fmtGain(p50, portfolioValue)}
+              <Text style={styles.subtitle}>
+                {Npaths.toLocaleString()} paths · {horizon}yr · {dist === 'student' ? 'Fat-tail' : 'Normal'}
               </Text>
             </View>
-            <View style={styles.gridItem}>
-              <Text style={styles.gridLabel}>P90</Text>
-              <Text style={[styles.gridValue, { color: '#1D9E75' }]}>{fmt(p90)}</Text>
-              <Text style={[styles.gridSub, { color: '#1D9E75' }]}>{fmtGain(p90, portfolioValue)}</Text>
+            <TouchableOpacity
+              style={styles.rerunBtn}
+              onPress={() => setRunKey(k => k + 1)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.rerunLabel}>↺  Re-run</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* ── Controls row ── */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.controlsScroll}
+          >
+            {/* Horizon */}
+            <View style={styles.controlGroup}>
+              <Text style={styles.controlGroupLabel}>Horizon</Text>
+              <View style={styles.chipRow}>
+                {[1, 3, 5, 10].map(y => (
+                  <ToggleChip key={y} label={`${y}yr`} active={horizon === y} onPress={() => setHorizon(y)} />
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.controlDivider} />
+
+            {/* Paths */}
+            <View style={styles.controlGroup}>
+              <Text style={styles.controlGroupLabel}>Paths</Text>
+              <View style={styles.chipRow}>
+                {[100, 1000, 5000].map(v => (
+                  <ToggleChip key={v} label={v >= 1000 ? `${v / 1000}k` : `${v}`} active={Npaths === v} onPress={() => setNpaths(v)} />
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.controlDivider} />
+
+            {/* Distribution */}
+            <View style={styles.controlGroup}>
+              <Text style={styles.controlGroupLabel}>Distribution</Text>
+              <View style={styles.chipRow}>
+                <ToggleChip label="Normal" active={dist === 'normal'} onPress={() => setDist('normal')} />
+                <ToggleChip label="Fat-tail" active={dist === 'student'} onPress={() => setDist('student')} color="#7C3AED" />
+              </View>
+            </View>
+
+            <View style={styles.controlDivider} />
+
+            {/* Correlation */}
+            <View style={styles.controlGroup}>
+              <Text style={styles.controlGroupLabel}>Correlation</Text>
+              <View style={styles.chipRow}>
+                <ToggleChip label="On" active={correlated} onPress={() => setCorrelated(true)} />
+                <ToggleChip label="Off" active={!correlated} onPress={() => setCorrelated(false)} />
+              </View>
+            </View>
+          </ScrollView>
+
+          {/* ── Chart ── */}
+          <View style={styles.chartWrapper}>
+            <Svg width={CARD_WIDTH} height={H}>
+              {/* Y gridlines + labels */}
+              {yTicks.map((v, i) => (
+                <React.Fragment key={i}>
+                  <Line
+                    x1={PAD.l} y1={my(v)} x2={CARD_WIDTH - PAD.r} y2={my(v)}
+                    stroke="#F3F4F6" strokeWidth={1}
+                    strokeDasharray={i > 0 && i < 4 ? '3,4' : undefined}
+                  />
+                  <SvgText
+                    x={PAD.l - 6} y={my(v) + 4}
+                    textAnchor="end" fontSize={9} fill="#9CA3AF" fontFamily="System"
+                  >
+                    {fmtTick(v)}
+                  </SvgText>
+                </React.Fragment>
+              ))}
+
+              {/* Reference line (starting value) */}
+              {showRef && (
+                <Line
+                  x1={PAD.l} y1={refY} x2={CARD_WIDTH - PAD.r} y2={refY}
+                  stroke="#6B7280" strokeWidth={1} strokeDasharray="4,4"
+                />
+              )}
+
+              {/* X labels */}
+              {xTicks.map(i => (
+                <SvgText
+                  key={i}
+                  x={mx(Math.round((i / horizon) * steps))}
+                  y={H - PAD.b + 16}
+                  textAnchor="middle" fontSize={9} fill="#9CA3AF" fontFamily="System"
+                >
+                  {i === 0 ? 'Now' : `${i}yr`}
+                </SvgText>
+              ))}
+
+              {/* Ghost paths */}
+              {samplePaths?.filter(Boolean).map((s, i) => {
+                const p = pts(s);
+                if (!p) return null;
+                return (
+                  <Polyline
+                    key={i} points={p} fill="none"
+                    stroke="#94A3B8" strokeWidth={0.6} strokeOpacity={0.18}
+                  />
+                );
+              })}
+
+              {/* Confidence band P10–P90 */}
+              {bandPolygon && (
+                <Polygon points={bandPolygon} fill="#94A3B8" fillOpacity={0.10} stroke="none" />
+              )}
+
+              {/* Percentile paths */}
+              <Polyline points={pts(pathP10)} fill="none" stroke="#EF4444" strokeWidth={1.8} strokeOpacity={0.9} />
+              <Polyline points={pts(pathP50)} fill="none" stroke="#111827" strokeWidth={2.2} />
+              <Polyline points={pts(pathP90)} fill="none" stroke="#10B981" strokeWidth={1.8} strokeOpacity={0.9} />
+
+              {/* End-point dots */}
+              {[
+                { path: pathP10, color: '#EF4444' },
+                { path: pathP50, color: '#111827' },
+                { path: pathP90, color: '#10B981' },
+              ].map(({ path, color }, i) => {
+                const s = sanitize(path);
+                if (!s?.length) return null;
+                const lastV = s[s.length - 1];
+                return (
+                  <Circle
+                    key={i}
+                    cx={mx(steps - 1)} cy={my(lastV)}
+                    r={3.5} fill={color}
+                  />
+                );
+              })}
+
+              {/* Axes */}
+              <Line x1={PAD.l} y1={H - PAD.b} x2={CARD_WIDTH - PAD.r} y2={H - PAD.b} stroke="#E5E7EB" strokeWidth={1} />
+              <Line x1={PAD.l} y1={PAD.t} x2={PAD.l} y2={H - PAD.b} stroke="#E5E7EB" strokeWidth={1} />
+            </Svg>
+
+            {/* Legend overlay */}
+            <View style={styles.legendOverlay}>
+              {[
+                { label: 'Bear (P10)', color: '#EF4444' },
+                { label: 'Base (P50)', color: '#111827' },
+                { label: 'Bull (P90)', color: '#10B981' },
+              ].map(({ label, color }) => (
+                <View key={label} style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: color }]} />
+                  <Text style={styles.legendLabel}>{label}</Text>
+                </View>
+              ))}
             </View>
           </View>
 
-          {/* Prob of loss + drawdown pills */}
-          <View style={styles.metricsRow}>
-            <View style={styles.metricPill}>
-              <Text style={styles.metricPillLabel}>Probability of loss</Text>
-              <Text style={[styles.metricPillVal, { color: lossColor }]}>{fmtPct(probLoss)}</Text>
-            </View>
-            <View style={styles.metricPill}>
-              <Text style={styles.metricPillLabel}>Avg max drawdown</Text>
-              <Text style={[styles.metricPillVal, { color: ddColor }]}>{fmtPct(avgMaxDd)}</Text>
-            </View>
-            <View style={styles.metricPill}>
-              <Text style={styles.metricPillLabel}>CVaR (95%)</Text>
-              <Text style={[styles.metricPillVal, { color: '#E24B4A' }]}>{fmt(cvar95)}</Text>
-            </View>
+          {/* ── Scenario outcomes ── */}
+          <View style={styles.scenarioRow}>
+            <ScenarioCard
+              label="Bear"
+              value={fmt(p10)}
+              pct={gainPct(p10, portfolioValue)}
+              accentColor="#EF4444"
+            />
+            <ScenarioCard
+              label="Base"
+              value={fmt(p50)}
+              pct={gainPct(p50, portfolioValue)}
+              accentColor="#111827"
+              isMiddle
+            />
+            <ScenarioCard
+              label="Bull"
+              value={fmt(p90)}
+              pct={gainPct(p90, portfolioValue)}
+              accentColor="#10B981"
+            />
           </View>
 
+          {/* ── Risk stats bar ── */}
+          <View style={styles.statsBar}>
+            <StatItem
+              label="Prob. Loss"
+              value={probLoss.toFixed(1) + '%'}
+              valueColor={lossColor}
+            />
+            <View style={styles.statDivider} />
+            <StatItem
+              label="Max Drawdown"
+              value={avgMaxDd.toFixed(1) + '%'}
+              valueColor={ddColor}
+            />
+            <View style={styles.statDivider} />
+            <StatItem
+              label="CVaR 95%"
+              value={fmt(cvar95)}
+              valueColor="#EF4444"
+            />
+          </View>
+
+          {/* ── Disclaimer ── */}
           <Text style={styles.disclaimer}>
-            Simulated paths use geometric Brownian motion. Not financial advice.
+            GBM simulation · {dist === 'student' ? 'Student-t fat tails' : 'Normal distribution'} · Not financial advice
           </Text>
+
         </Card.Content>
       </Card>
     </View>
   );
 };
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: { marginHorizontal: 16, marginBottom: 16 },
-  card: { borderRadius: 14, backgroundColor: '#FCFCFC' },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
-  title: { fontSize: 17, fontWeight: '700', color: COLORS.textPrimary },
-  subtitle: { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
-  runBtn: { borderRadius: 18, borderColor: '#1F1F1F' },
-  runBtnLabel: { fontSize: 12, color: COLORS.textPrimary },
-  legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 10 },
-  legItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  legLine: { width: 18, height: 2.5, borderRadius: 2 },
-  legText: { fontSize: 11, color: COLORS.textSecondary },
-  healthCard: {
-    flexDirection: 'row', marginTop: 14,
-    backgroundColor: '#F9FAFB', borderColor: '#1F1F1F',
-    borderWidth: 1, borderRadius: 20, padding: 14, marginBottom: 10,
+  container: {
+    marginHorizontal: 16,
+    marginBottom: 16,
   },
-  gridItem: { flex: 1, alignItems: 'center' },
-  gridMiddle: {
-    borderLeftWidth: 0.5, borderRightWidth: 0.5,
-    borderColor: '#1F1F1F',
+  card: {
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E7EB',
   },
-  gridLabel: { fontSize: 11, color: COLORS.textSecondary, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.4 },
-  gridValue: { fontSize: 15, fontWeight: '700', color: COLORS.textPrimary },
-  gridSub: { fontSize: 11, marginTop: 2 },
-  metricsRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
-  metricPill: {
-    flex: 1, backgroundColor: '#F7F7F7',
-    borderColor: '#1F1F1F', borderWidth: 1,
-    borderRadius: 16, padding: 10,
+  content: {
+    paddingHorizontal: 16,
+    paddingVertical: 18,
   },
-  controlsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
-  controlsLeft: { flex: 1 },
-  controlsRight: { alignItems: 'flex-end', justifyContent: 'space-between' },
-  smallInput: { width: 84 },
-  metricPillLabel: { fontSize: 11, color: COLORS.textSecondary, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 3 },
-  metricPillVal: { fontSize: 15, fontWeight: '700' },
-  disclaimer: { fontSize: 11, color: COLORS.textDisabled, fontStyle: 'italic', textAlign: 'center', marginTop: 4 },
+
+  // Header
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+    letterSpacing: -0.3,
+  },
+  subtitle: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginTop: 2,
+    fontWeight: '400',
+  },
+  rerunBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#F9FAFB',
+  },
+  rerunLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
+  },
+
+  // Controls
+  controlsScroll: {
+    paddingBottom: 14,
+    alignItems: 'flex-start',
+    gap: 0,
+  },
+  controlGroup: {
+    marginRight: 4,
+  },
+  controlGroupLabel: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#9CA3AF',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginBottom: 5,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    gap: 5,
+  },
+  controlDivider: {
+    width: 1,
+    backgroundColor: '#E5E7EB',
+    marginHorizontal: 12,
+    marginTop: 16,
+    height: 28,
+    alignSelf: 'center',
+  },
+
+  // Chart
+  chartWrapper: {
+    position: 'relative',
+    marginBottom: 4,
+  },
+  legendOverlay: {
+    position: 'absolute',
+    top: PAD.t + 4,
+    right: PAD.r + 4,
+    flexDirection: 'column',
+    gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.88)',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  legendDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  legendLabel: {
+    fontSize: 9,
+    color: '#374151',
+    fontWeight: '500',
+  },
+
+  // Scenarios
+  scenarioRow: {
+    flexDirection: 'row',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E7EB',
+    borderRadius: 14,
+    backgroundColor: '#FAFAFA',
+    marginTop: 8,
+    marginBottom: 10,
+    overflow: 'hidden',
+  },
+
+  // Stats
+  statsBar: {
+    flexDirection: 'row',
+    backgroundColor: '#F9FAFB',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    marginBottom: 10,
+  },
+  statDivider: {
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: '#E5E7EB',
+    marginVertical: 2,
+  },
+
+  // Loading
+  loadingRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  loadingChart: {
+    height: H,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+  },
+
+  // Disclaimer
+  disclaimer: {
+    fontSize: 10,
+    color: '#D1D5DB',
+    textAlign: 'center',
+    fontStyle: 'italic',
+    letterSpacing: 0.2,
+  },
 });
 
 export default MonteCarlo;

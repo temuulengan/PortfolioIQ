@@ -144,7 +144,14 @@ export function runMonteCarlo({ assets = [], N = 1000, steps = 252, correlated =
   for (let i = 0; i < nAssets; i++) {
     const a = assets[i];
     if (a.muAnnual !== undefined && a.sigmaAnnual !== undefined) {
-      muDaily[i] = (a.muAnnual / 100) / 252; // assume muAnnual in percent
+      // Defensive clamp for muAnnual to avoid unrealistic drift inputs
+      let muAnnualVal = Number(a.muAnnual);
+      if (!Number.isFinite(muAnnualVal)) muAnnualVal = 0;
+      if (muAnnualVal > 40 || muAnnualVal < -40) {
+        console.warn('Clamping incoming muAnnual to [-40,40]:', muAnnualVal);
+        muAnnualVal = Math.max(-40, Math.min(40, muAnnualVal));
+      }
+      muDaily[i] = (muAnnualVal / 100) / 252; // assume muAnnual in percent
       sigmaDaily[i] = (a.sigmaAnnual / 100) / Math.sqrt(252);
     } else if (dailyMeans && dailyStds) {
       muDaily[i] = dailyMeans[i] || 0;

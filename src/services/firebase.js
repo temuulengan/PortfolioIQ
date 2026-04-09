@@ -330,5 +330,12 @@ export const updateUserProfile = async (userId, updates) => {
   }
 };
 
+// IMPORTANT: This must also call FirebaseAuth.currentUser.delete() which requires recent re-authentication
+// (reauthenticateWithCredential). Implement before shipping.
+export const deleteUserAccount = async (userId) => {
+  // TODO: implement full account deletion (Firestore documents + Auth user delete with reauth)
+  console.warn('deleteUserAccount called for', userId);
+};
+
 // Export Firestore utilities
 export { Timestamp, db, auth };

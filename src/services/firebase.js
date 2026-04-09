@@ -121,6 +121,21 @@ export const onAuthChange = (callback) => {
   return onAuthStateChanged(auth, callback);
 };
 
+/**
+ * Update Firebase Auth profile for current user (displayName, photoURL)
+ */
+export const updateAuthProfile = async (updates) => {
+  try {
+    const user = getCurrentUser();
+    if (!user) throw new Error('User not authenticated');
+    // updateProfile is imported from firebase/auth at top of this file
+    await updateProfile(user, updates);
+    return true;
+  } catch (error) {
+    throw error;
+  }
+};
+
 // ==================== PORTFOLIO FUNCTIONS ====================
 
 /**

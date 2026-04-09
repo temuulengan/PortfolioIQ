@@ -1,4 +1,4 @@
-import React, { useContext } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -15,9 +15,40 @@ import {
 } from 'react-native-paper';
 import { COLORS } from '../../shared/colors';
 import { AuthContext } from '../context/AuthContext';
+import { Switch, Button, Dialog, Portal, TextInput } from 'react-native-paper';
+import { getUserProfile, updateUserProfile, updateAuthProfile } from '../../services/firebase';
 
 const SettingsScreen = () => {
-  const { user, logout } = useContext(AuthContext);
+  const { user, logout, resetPassword } = useContext(AuthContext);
+  const [profile, setProfile] = useState(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+
+  const [showProfileDialog, setShowProfileDialog] = useState(false);
+  const [editName, setEditName] = useState('');
+
+  const [showCurrencyDialog, setShowCurrencyDialog] = useState(false);
+  const [currency, setCurrency] = useState('USD');
+
+  const [notifEnabled, setNotifEnabled] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      if (!user) return setLoadingProfile(false);
+      try {
+        const p = await getUserProfile(user.uid);
+        setProfile(p);
+        setCurrency(p?.currency || 'USD');
+        setNotifEnabled(p?.notificationsEnabled !== false);
+        setEditName(p?.displayName || user.displayName || '');
+      } catch (err) {
+        console.error('Error loading profile in Settings:', err);
+      } finally {
+        setLoadingProfile(false);
+      }
+    };
+    load();
+  }, [user]);
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -53,18 +84,31 @@ const SettingsScreen = () => {
         
         <List.Item
           title="Profile Settings"
-          description="Update your personal information"
+          description="Update your display name"
           left={(props) => <List.Icon {...props} icon="account-edit" color={COLORS.primary} />}
-          onPress={() => Alert.alert('Coming Soon', 'Profile editing will be available soon')}
+          onPress={() => setShowProfileDialog(true)}
         />
 
         <Divider />
 
         <List.Item
           title="Change Password"
-          description="Update your account password"
+          description="Send password reset email"
           left={(props) => <List.Icon {...props} icon="lock-reset" color={COLORS.primary} />}
-          onPress={() => Alert.alert('Coming Soon', 'Password change will be available soon')}
+            onPress={async () => {
+            if (!user?.email) return Alert.alert('Error', 'No email available for this account');
+            try {
+              const res = await resetPassword(user.email);
+              if (res?.success) {
+                Alert.alert('Password Reset', 'A password reset email has been sent.');
+              } else {
+                throw new Error(res?.error || 'reset failed');
+              }
+            } catch (err) {
+              console.error('Error sending reset:', err);
+              Alert.alert('Error', 'Unable to send reset email.');
+            }
+          }}
         />
       </List.Section>
 
@@ -75,9 +119,21 @@ const SettingsScreen = () => {
         
         <List.Item
           title="Notifications"
-          description="Manage notification settings"
+          description={notifEnabled ? 'Enabled' : 'Disabled'}
           left={(props) => <List.Icon {...props} icon="bell" color={COLORS.primary} />}
-          onPress={() => Alert.alert('Coming Soon', 'Notification settings will be available soon')}
+          right={() => (
+            <Switch value={notifEnabled} onValueChange={async (v) => {
+              setNotifEnabled(v);
+              try {
+                setSaving(true);
+                if (user) await updateUserProfile(user.uid, { notificationsEnabled: v });
+              } catch (err) {
+                console.error('Error saving notifications preference:', err);
+                Alert.alert('Error', 'Unable to save notification preference');
+                setNotifEnabled(!v);
+              } finally { setSaving(false); }
+            }} />
+          )}
         />
 
         <Divider />
@@ -86,7 +142,7 @@ const SettingsScreen = () => {
           title="Currency"
           description="Default: USD"
           left={(props) => <List.Icon {...props} icon="currency-usd" color={COLORS.primary} />}
-          onPress={() => Alert.alert('Coming Soon', 'Currency settings will be available soon')}
+          onPress={() => setShowCurrencyDialog(true)}
         />
       </List.Section>
 
@@ -107,6 +163,55 @@ const SettingsScreen = () => {
           left={(props) => <List.Icon {...props} icon="shield-check" />}
         />
       </List.Section>
+
+      <Portal>
+        <Dialog visible={showProfileDialog} onDismiss={() => setShowProfileDialog(false)}>
+          <Dialog.Title>Edit Profile</Dialog.Title>
+          <Dialog.Content>
+            <TextInput label="Display Name" value={editName} onChangeText={setEditName} />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setShowProfileDialog(false)}>Cancel</Button>
+            <Button onPress={async () => {
+              if (!user) return;
+              try {
+                setSaving(true);
+                // update auth profile and firestore profile
+                await updateAuthProfile({ displayName: editName });
+                await updateUserProfile(user.uid, { displayName: editName });
+                setProfile(prev => ({ ...(prev||{}), displayName: editName }));
+                Alert.alert('Saved', 'Display name updated');
+                setShowProfileDialog(false);
+              } catch (err) {
+                console.error('Error updating profile:', err);
+                Alert.alert('Error', 'Unable to update profile');
+              } finally { setSaving(false); }
+            }}>Save</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        <Dialog visible={showCurrencyDialog} onDismiss={() => setShowCurrencyDialog(false)}>
+          <Dialog.Title>Default Currency</Dialog.Title>
+          <Dialog.Content>
+            <TextInput label="Currency Code" value={currency} onChangeText={setCurrency} />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setShowCurrencyDialog(false)}>Cancel</Button>
+            <Button onPress={async () => {
+              if (!user) return;
+              try {
+                setSaving(true);
+                await updateUserProfile(user.uid, { currency: currency });
+                Alert.alert('Saved', `Default currency set to ${currency}`);
+                setShowCurrencyDialog(false);
+              } catch (err) {
+                console.error('Error saving currency:', err);
+                Alert.alert('Error', 'Unable to save currency');
+              } finally { setSaving(false); }
+            }}>Save</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
 
       <Divider />
 

@@ -322,7 +322,9 @@ export const getUserProfile = async (userId) => {
 export const updateUserProfile = async (userId, updates) => {
   try {
     const userRef = doc(db, 'users', userId);
-    await updateDoc(userRef, updates);
+    // Use setDoc with merge to create the document if it doesn't exist
+    // and to avoid 'No document to update' errors when preferences are saved before user doc creation.
+    await setDoc(userRef, updates, { merge: true });
   } catch (error) {
     throw error;
   }

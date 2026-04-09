@@ -1,0 +1,2021 @@
+{
+  "timestamp": "2026-04-09T06:47:44.261Z",
+  "report": {
+    "total": 503,
+    "foundCount": 503,
+    "results": [
+      {
+        "symbol": "MMM",
+        "found": true
+      },
+      {
+        "symbol": "AOS",
+        "found": true
+      },
+      {
+        "symbol": "ABT",
+        "found": true
+      },
+      {
+        "symbol": "ABBV",
+        "found": true
+      },
+      {
+        "symbol": "ACN",
+        "found": true
+      },
+      {
+        "symbol": "ADBE",
+        "found": true
+      },
+      {
+        "symbol": "AMD",
+        "found": true
+      },
+      {
+        "symbol": "AES",
+        "found": true
+      },
+      {
+        "symbol": "AFL",
+        "found": true
+      },
+      {
+        "symbol": "A",
+        "found": true
+      },
+      {
+        "symbol": "APD",
+        "found": true
+      },
+      {
+        "symbol": "ABNB",
+        "found": true
+      },
+      {
+        "symbol": "AKAM",
+        "found": true
+      },
+      {
+        "symbol": "ALB",
+        "found": true
+      },
+      {
+        "symbol": "ARE",
+        "found": true
+      },
+      {
+        "symbol": "ALGN",
+        "found": true
+      },
+      {
+        "symbol": "ALLE",
+        "found": true
+      },
+      {
+        "symbol": "LNT",
+        "found": true
+      },
+      {
+        "symbol": "ALL",
+        "found": true
+      },
+      {
+        "symbol": "GOOGL",
+        "found": true
+      },
+      {
+        "symbol": "GOOG",
+        "found": true
+      },
+      {
+        "symbol": "MO",
+        "found": true
+      },
+      {
+        "symbol": "AMZN",
+        "found": true
+      },
+      {
+        "symbol": "AMCR",
+        "found": true
+      },
+      {
+        "symbol": "AEE",
+        "found": true
+      },
+      {
+        "symbol": "AEP",
+        "found": true
+      },
+      {
+        "symbol": "AXP",
+        "found": true
+      },
+      {
+        "symbol": "AIG",
+        "found": true
+      },
+      {
+        "symbol": "AMT",
+        "found": true
+      },
+      {
+        "symbol": "AWK",
+        "found": true
+      },
+      {
+        "symbol": "AMP",
+        "found": true
+      },
+      {
+        "symbol": "AME",
+        "found": true
+      },
+      {
+        "symbol": "AMGN",
+        "found": true
+      },
+      {
+        "symbol": "APH",
+        "found": true
+      },
+      {
+        "symbol": "ADI",
+        "found": true
+      },
+      {
+        "symbol": "AON",
+        "found": true
+      },
+      {
+        "symbol": "APA",
+        "found": true
+      },
+      {
+        "symbol": "APO",
+        "found": true
+      },
+      {
+        "symbol": "AAPL",
+        "found": true
+      },
+      {
+        "symbol": "AMAT",
+        "found": true
+      },
+      {
+        "symbol": "APP",
+        "found": true
+      },
+      {
+        "symbol": "APTV",
+        "found": true
+      },
+      {
+        "symbol": "ACGL",
+        "found": true
+      },
+      {
+        "symbol": "ADM",
+        "found": true
+      },
+      {
+        "symbol": "ARES",
+        "found": true
+      },
+      {
+        "symbol": "ANET",
+        "found": true
+      },
+      {
+        "symbol": "AJG",
+        "found": true
+      },
+      {
+        "symbol": "AIZ",
+        "found": true
+      },
+      {
+        "symbol": "T",
+        "found": true
+      },
+      {
+        "symbol": "ATO",
+        "found": true
+      },
+      {
+        "symbol": "ADSK",
+        "found": true
+      },
+      {
+        "symbol": "ADP",
+        "found": true
+      },
+      {
+        "symbol": "AZO",
+        "found": true
+      },
+      {
+        "symbol": "AVB",
+        "found": true
+      },
+      {
+        "symbol": "AVY",
+        "found": true
+      },
+      {
+        "symbol": "AXON",
+        "found": true
+      },
+      {
+        "symbol": "BKR",
+        "found": true
+      },
+      {
+        "symbol": "BALL",
+        "found": true
+      },
+      {
+        "symbol": "BAC",
+        "found": true
+      },
+      {
+        "symbol": "BAX",
+        "found": true
+      },
+      {
+        "symbol": "BDX",
+        "found": true
+      },
+      {
+        "symbol": "BRK-B",
+        "found": true
+      },
+      {
+        "symbol": "BBY",
+        "found": true
+      },
+      {
+        "symbol": "TECH",
+        "found": true
+      },
+      {
+        "symbol": "BIIB",
+        "found": true
+      },
+      {
+        "symbol": "BLK",
+        "found": true
+      },
+      {
+        "symbol": "BX",
+        "found": true
+      },
+      {
+        "symbol": "XYZ",
+        "found": true
+      },
+      {
+        "symbol": "BK",
+        "found": true
+      },
+      {
+        "symbol": "BA",
+        "found": true
+      },
+      {
+        "symbol": "BKNG",
+        "found": true
+      },
+      {
+        "symbol": "BSX",
+        "found": true
+      },
+      {
+        "symbol": "BMY",
+        "found": true
+      },
+      {
+        "symbol": "AVGO",
+        "found": true
+      },
+      {
+        "symbol": "BR",
+        "found": true
+      },
+      {
+        "symbol": "BRO",
+        "found": true
+      },
+      {
+        "symbol": "BF-B",
+        "found": true
+      },
+      {
+        "symbol": "BLDR",
+        "found": true
+      },
+      {
+        "symbol": "BG",
+        "found": true
+      },
+      {
+        "symbol": "BXP",
+        "found": true
+      },
+      {
+        "symbol": "CHRW",
+        "found": true
+      },
+      {
+        "symbol": "CDNS",
+        "found": true
+      },
+      {
+        "symbol": "CPT",
+        "found": true
+      },
+      {
+        "symbol": "CPB",
+        "found": true
+      },
+      {
+        "symbol": "COF",
+        "found": true
+      },
+      {
+        "symbol": "CAH",
+        "found": true
+      },
+      {
+        "symbol": "CCL",
+        "found": true
+      },
+      {
+        "symbol": "CARR",
+        "found": true
+      },
+      {
+        "symbol": "CVNA",
+        "found": true
+      },
+      {
+        "symbol": "CASY",
+        "found": true
+      },
+      {
+        "symbol": "CAT",
+        "found": true
+      },
+      {
+        "symbol": "CBOE",
+        "found": true
+      },
+      {
+        "symbol": "CBRE",
+        "found": true
+      },
+      {
+        "symbol": "CDW",
+        "found": true
+      },
+      {
+        "symbol": "COR",
+        "found": true
+      },
+      {
+        "symbol": "CNC",
+        "found": true
+      },
+      {
+        "symbol": "CNP",
+        "found": true
+      },
+      {
+        "symbol": "CF",
+        "found": true
+      },
+      {
+        "symbol": "CRL",
+        "found": true
+      },
+      {
+        "symbol": "SCHW",
+        "found": true
+      },
+      {
+        "symbol": "CHTR",
+        "found": true
+      },
+      {
+        "symbol": "CVX",
+        "found": true
+      },
+      {
+        "symbol": "CMG",
+        "found": true
+      },
+      {
+        "symbol": "CB",
+        "found": true
+      },
+      {
+        "symbol": "CHD",
+        "found": true
+      },
+      {
+        "symbol": "CIEN",
+        "found": true
+      },
+      {
+        "symbol": "CI",
+        "found": true
+      },
+      {
+        "symbol": "CINF",
+        "found": true
+      },
+      {
+        "symbol": "CTAS",
+        "found": true
+      },
+      {
+        "symbol": "CSCO",
+        "found": true
+      },
+      {
+        "symbol": "C",
+        "found": true
+      },
+      {
+        "symbol": "CFG",
+        "found": true
+      },
+      {
+        "symbol": "CLX",
+        "found": true
+      },
+      {
+        "symbol": "CME",
+        "found": true
+      },
+      {
+        "symbol": "CMS",
+        "found": true
+      },
+      {
+        "symbol": "KO",
+        "found": true
+      },
+      {
+        "symbol": "CTSH",
+        "found": true
+      },
+      {
+        "symbol": "COHR",
+        "found": true
+      },
+      {
+        "symbol": "COIN",
+        "found": true
+      },
+      {
+        "symbol": "CL",
+        "found": true
+      },
+      {
+        "symbol": "CMCSA",
+        "found": true
+      },
+      {
+        "symbol": "FIX",
+        "found": true
+      },
+      {
+        "symbol": "CAG",
+        "found": true
+      },
+      {
+        "symbol": "COP",
+        "found": true
+      },
+      {
+        "symbol": "ED",
+        "found": true
+      },
+      {
+        "symbol": "STZ",
+        "found": true
+      },
+      {
+        "symbol": "CEG",
+        "found": true
+      },
+      {
+        "symbol": "COO",
+        "found": true
+      },
+      {
+        "symbol": "CPRT",
+        "found": true
+      },
+      {
+        "symbol": "GLW",
+        "found": true
+      },
+      {
+        "symbol": "CPAY",
+        "found": true
+      },
+      {
+        "symbol": "CTVA",
+        "found": true
+      },
+      {
+        "symbol": "CSGP",
+        "found": true
+      },
+      {
+        "symbol": "COST",
+        "found": true
+      },
+      {
+        "symbol": "CTRA",
+        "found": true
+      },
+      {
+        "symbol": "CRH",
+        "found": true
+      },
+      {
+        "symbol": "CRWD",
+        "found": true
+      },
+      {
+        "symbol": "CCI",
+        "found": true
+      },
+      {
+        "symbol": "CSX",
+        "found": true
+      },
+      {
+        "symbol": "CMI",
+        "found": true
+      },
+      {
+        "symbol": "CVS",
+        "found": true
+      },
+      {
+        "symbol": "DHR",
+        "found": true
+      },
+      {
+        "symbol": "DRI",
+        "found": true
+      },
+      {
+        "symbol": "DDOG",
+        "found": true
+      },
+      {
+        "symbol": "DVA",
+        "found": true
+      },
+      {
+        "symbol": "DECK",
+        "found": true
+      },
+      {
+        "symbol": "DE",
+        "found": true
+      },
+      {
+        "symbol": "DELL",
+        "found": true
+      },
+      {
+        "symbol": "DAL",
+        "found": true
+      },
+      {
+        "symbol": "DVN",
+        "found": true
+      },
+      {
+        "symbol": "DXCM",
+        "found": true
+      },
+      {
+        "symbol": "FANG",
+        "found": true
+      },
+      {
+        "symbol": "DLR",
+        "found": true
+      },
+      {
+        "symbol": "DG",
+        "found": true
+      },
+      {
+        "symbol": "DLTR",
+        "found": true
+      },
+      {
+        "symbol": "D",
+        "found": true
+      },
+      {
+        "symbol": "DPZ",
+        "found": true
+      },
+      {
+        "symbol": "DASH",
+        "found": true
+      },
+      {
+        "symbol": "DOV",
+        "found": true
+      },
+      {
+        "symbol": "DOW",
+        "found": true
+      },
+      {
+        "symbol": "DHI",
+        "found": true
+      },
+      {
+        "symbol": "DTE",
+        "found": true
+      },
+      {
+        "symbol": "DUK",
+        "found": true
+      },
+      {
+        "symbol": "DD",
+        "found": true
+      },
+      {
+        "symbol": "ETN",
+        "found": true
+      },
+      {
+        "symbol": "EBAY",
+        "found": true
+      },
+      {
+        "symbol": "SATS",
+        "found": true
+      },
+      {
+        "symbol": "ECL",
+        "found": true
+      },
+      {
+        "symbol": "EIX",
+        "found": true
+      },
+      {
+        "symbol": "EW",
+        "found": true
+      },
+      {
+        "symbol": "EA",
+        "found": true
+      },
+      {
+        "symbol": "ELV",
+        "found": true
+      },
+      {
+        "symbol": "EME",
+        "found": true
+      },
+      {
+        "symbol": "EMR",
+        "found": true
+      },
+      {
+        "symbol": "ETR",
+        "found": true
+      },
+      {
+        "symbol": "EOG",
+        "found": true
+      },
+      {
+        "symbol": "EPAM",
+        "found": true
+      },
+      {
+        "symbol": "EQT",
+        "found": true
+      },
+      {
+        "symbol": "EFX",
+        "found": true
+      },
+      {
+        "symbol": "EQIX",
+        "found": true
+      },
+      {
+        "symbol": "EQR",
+        "found": true
+      },
+      {
+        "symbol": "ERIE",
+        "found": true
+      },
+      {
+        "symbol": "ESS",
+        "found": true
+      },
+      {
+        "symbol": "EL",
+        "found": true
+      },
+      {
+        "symbol": "EG",
+        "found": true
+      },
+      {
+        "symbol": "EVRG",
+        "found": true
+      },
+      {
+        "symbol": "ES",
+        "found": true
+      },
+      {
+        "symbol": "EXC",
+        "found": true
+      },
+      {
+        "symbol": "EXE",
+        "found": true
+      },
+      {
+        "symbol": "EXPE",
+        "found": true
+      },
+      {
+        "symbol": "EXPD",
+        "found": true
+      },
+      {
+        "symbol": "EXR",
+        "found": true
+      },
+      {
+        "symbol": "XOM",
+        "found": true
+      },
+      {
+        "symbol": "FFIV",
+        "found": true
+      },
+      {
+        "symbol": "FDS",
+        "found": true
+      },
+      {
+        "symbol": "FICO",
+        "found": true
+      },
+      {
+        "symbol": "FAST",
+        "found": true
+      },
+      {
+        "symbol": "FRT",
+        "found": true
+      },
+      {
+        "symbol": "FDX",
+        "found": true
+      },
+      {
+        "symbol": "FIS",
+        "found": true
+      },
+      {
+        "symbol": "FITB",
+        "found": true
+      },
+      {
+        "symbol": "FSLR",
+        "found": true
+      },
+      {
+        "symbol": "FE",
+        "found": true
+      },
+      {
+        "symbol": "FISV",
+        "found": true
+      },
+      {
+        "symbol": "F",
+        "found": true
+      },
+      {
+        "symbol": "FTNT",
+        "found": true
+      },
+      {
+        "symbol": "FTV",
+        "found": true
+      },
+      {
+        "symbol": "FOXA",
+        "found": true
+      },
+      {
+        "symbol": "FOX",
+        "found": true
+      },
+      {
+        "symbol": "BEN",
+        "found": true
+      },
+      {
+        "symbol": "FCX",
+        "found": true
+      },
+      {
+        "symbol": "GRMN",
+        "found": true
+      },
+      {
+        "symbol": "IT",
+        "found": true
+      },
+      {
+        "symbol": "GE",
+        "found": true
+      },
+      {
+        "symbol": "GEHC",
+        "found": true
+      },
+      {
+        "symbol": "GEV",
+        "found": true
+      },
+      {
+        "symbol": "GEN",
+        "found": true
+      },
+      {
+        "symbol": "GNRC",
+        "found": true
+      },
+      {
+        "symbol": "GD",
+        "found": true
+      },
+      {
+        "symbol": "GIS",
+        "found": true
+      },
+      {
+        "symbol": "GM",
+        "found": true
+      },
+      {
+        "symbol": "GPC",
+        "found": true
+      },
+      {
+        "symbol": "GILD",
+        "found": true
+      },
+      {
+        "symbol": "GPN",
+        "found": true
+      },
+      {
+        "symbol": "GL",
+        "found": true
+      },
+      {
+        "symbol": "GDDY",
+        "found": true
+      },
+      {
+        "symbol": "GS",
+        "found": true
+      },
+      {
+        "symbol": "HAL",
+        "found": true
+      },
+      {
+        "symbol": "HIG",
+        "found": true
+      },
+      {
+        "symbol": "HAS",
+        "found": true
+      },
+      {
+        "symbol": "HCA",
+        "found": true
+      },
+      {
+        "symbol": "DOC",
+        "found": true
+      },
+      {
+        "symbol": "HSIC",
+        "found": true
+      },
+      {
+        "symbol": "HSY",
+        "found": true
+      },
+      {
+        "symbol": "HPE",
+        "found": true
+      },
+      {
+        "symbol": "HLT",
+        "found": true
+      },
+      {
+        "symbol": "HD",
+        "found": true
+      },
+      {
+        "symbol": "HON",
+        "found": true
+      },
+      {
+        "symbol": "HRL",
+        "found": true
+      },
+      {
+        "symbol": "HST",
+        "found": true
+      },
+      {
+        "symbol": "HWM",
+        "found": true
+      },
+      {
+        "symbol": "HPQ",
+        "found": true
+      },
+      {
+        "symbol": "HUBB",
+        "found": true
+      },
+      {
+        "symbol": "HUM",
+        "found": true
+      },
+      {
+        "symbol": "HBAN",
+        "found": true
+      },
+      {
+        "symbol": "HII",
+        "found": true
+      },
+      {
+        "symbol": "IBM",
+        "found": true
+      },
+      {
+        "symbol": "IEX",
+        "found": true
+      },
+      {
+        "symbol": "IDXX",
+        "found": true
+      },
+      {
+        "symbol": "ITW",
+        "found": true
+      },
+      {
+        "symbol": "INCY",
+        "found": true
+      },
+      {
+        "symbol": "IR",
+        "found": true
+      },
+      {
+        "symbol": "PODD",
+        "found": true
+      },
+      {
+        "symbol": "INTC",
+        "found": true
+      },
+      {
+        "symbol": "IBKR",
+        "found": true
+      },
+      {
+        "symbol": "ICE",
+        "found": true
+      },
+      {
+        "symbol": "IFF",
+        "found": true
+      },
+      {
+        "symbol": "IP",
+        "found": true
+      },
+      {
+        "symbol": "INTU",
+        "found": true
+      },
+      {
+        "symbol": "ISRG",
+        "found": true
+      },
+      {
+        "symbol": "IVZ",
+        "found": true
+      },
+      {
+        "symbol": "INVH",
+        "found": true
+      },
+      {
+        "symbol": "IQV",
+        "found": true
+      },
+      {
+        "symbol": "IRM",
+        "found": true
+      },
+      {
+        "symbol": "JBHT",
+        "found": true
+      },
+      {
+        "symbol": "JBL",
+        "found": true
+      },
+      {
+        "symbol": "JKHY",
+        "found": true
+      },
+      {
+        "symbol": "J",
+        "found": true
+      },
+      {
+        "symbol": "JNJ",
+        "found": true
+      },
+      {
+        "symbol": "JCI",
+        "found": true
+      },
+      {
+        "symbol": "JPM",
+        "found": true
+      },
+      {
+        "symbol": "KVUE",
+        "found": true
+      },
+      {
+        "symbol": "KDP",
+        "found": true
+      },
+      {
+        "symbol": "KEY",
+        "found": true
+      },
+      {
+        "symbol": "KEYS",
+        "found": true
+      },
+      {
+        "symbol": "KMB",
+        "found": true
+      },
+      {
+        "symbol": "KIM",
+        "found": true
+      },
+      {
+        "symbol": "KMI",
+        "found": true
+      },
+      {
+        "symbol": "KKR",
+        "found": true
+      },
+      {
+        "symbol": "KLAC",
+        "found": true
+      },
+      {
+        "symbol": "KHC",
+        "found": true
+      },
+      {
+        "symbol": "KR",
+        "found": true
+      },
+      {
+        "symbol": "LHX",
+        "found": true
+      },
+      {
+        "symbol": "LH",
+        "found": true
+      },
+      {
+        "symbol": "LRCX",
+        "found": true
+      },
+      {
+        "symbol": "LVS",
+        "found": true
+      },
+      {
+        "symbol": "LDOS",
+        "found": true
+      },
+      {
+        "symbol": "LEN",
+        "found": true
+      },
+      {
+        "symbol": "LII",
+        "found": true
+      },
+      {
+        "symbol": "LLY",
+        "found": true
+      },
+      {
+        "symbol": "LIN",
+        "found": true
+      },
+      {
+        "symbol": "LYV",
+        "found": true
+      },
+      {
+        "symbol": "LMT",
+        "found": true
+      },
+      {
+        "symbol": "L",
+        "found": true
+      },
+      {
+        "symbol": "LOW",
+        "found": true
+      },
+      {
+        "symbol": "LULU",
+        "found": true
+      },
+      {
+        "symbol": "LITE",
+        "found": true
+      },
+      {
+        "symbol": "LYB",
+        "found": true
+      },
+      {
+        "symbol": "MTB",
+        "found": true
+      },
+      {
+        "symbol": "MPC",
+        "found": true
+      },
+      {
+        "symbol": "MAR",
+        "found": true
+      },
+      {
+        "symbol": "MRSH",
+        "found": true
+      },
+      {
+        "symbol": "MLM",
+        "found": true
+      },
+      {
+        "symbol": "MAS",
+        "found": true
+      },
+      {
+        "symbol": "MA",
+        "found": true
+      },
+      {
+        "symbol": "MKC",
+        "found": true
+      },
+      {
+        "symbol": "MCD",
+        "found": true
+      },
+      {
+        "symbol": "MCK",
+        "found": true
+      },
+      {
+        "symbol": "MDT",
+        "found": true
+      },
+      {
+        "symbol": "MRK",
+        "found": true
+      },
+      {
+        "symbol": "META",
+        "found": true
+      },
+      {
+        "symbol": "MET",
+        "found": true
+      },
+      {
+        "symbol": "MTD",
+        "found": true
+      },
+      {
+        "symbol": "MGM",
+        "found": true
+      },
+      {
+        "symbol": "MCHP",
+        "found": true
+      },
+      {
+        "symbol": "MU",
+        "found": true
+      },
+      {
+        "symbol": "MSFT",
+        "found": true
+      },
+      {
+        "symbol": "MAA",
+        "found": true
+      },
+      {
+        "symbol": "MRNA",
+        "found": true
+      },
+      {
+        "symbol": "TAP",
+        "found": true
+      },
+      {
+        "symbol": "MDLZ",
+        "found": true
+      },
+      {
+        "symbol": "MPWR",
+        "found": true
+      },
+      {
+        "symbol": "MNST",
+        "found": true
+      },
+      {
+        "symbol": "MCO",
+        "found": true
+      },
+      {
+        "symbol": "MS",
+        "found": true
+      },
+      {
+        "symbol": "MOS",
+        "found": true
+      },
+      {
+        "symbol": "MSI",
+        "found": true
+      },
+      {
+        "symbol": "MSCI",
+        "found": true
+      },
+      {
+        "symbol": "NDAQ",
+        "found": true
+      },
+      {
+        "symbol": "NTAP",
+        "found": true
+      },
+      {
+        "symbol": "NFLX",
+        "found": true
+      },
+      {
+        "symbol": "NEM",
+        "found": true
+      },
+      {
+        "symbol": "NWSA",
+        "found": true
+      },
+      {
+        "symbol": "NWS",
+        "found": true
+      },
+      {
+        "symbol": "NEE",
+        "found": true
+      },
+      {
+        "symbol": "NKE",
+        "found": true
+      },
+      {
+        "symbol": "NI",
+        "found": true
+      },
+      {
+        "symbol": "NDSN",
+        "found": true
+      },
+      {
+        "symbol": "NSC",
+        "found": true
+      },
+      {
+        "symbol": "NTRS",
+        "found": true
+      },
+      {
+        "symbol": "NOC",
+        "found": true
+      },
+      {
+        "symbol": "NCLH",
+        "found": true
+      },
+      {
+        "symbol": "NRG",
+        "found": true
+      },
+      {
+        "symbol": "NUE",
+        "found": true
+      },
+      {
+        "symbol": "NVDA",
+        "found": true
+      },
+      {
+        "symbol": "NVR",
+        "found": true
+      },
+      {
+        "symbol": "NXPI",
+        "found": true
+      },
+      {
+        "symbol": "ORLY",
+        "found": true
+      },
+      {
+        "symbol": "OXY",
+        "found": true
+      },
+      {
+        "symbol": "ODFL",
+        "found": true
+      },
+      {
+        "symbol": "OMC",
+        "found": true
+      },
+      {
+        "symbol": "ON",
+        "found": true
+      },
+      {
+        "symbol": "OKE",
+        "found": true
+      },
+      {
+        "symbol": "ORCL",
+        "found": true
+      },
+      {
+        "symbol": "OTIS",
+        "found": true
+      },
+      {
+        "symbol": "PCAR",
+        "found": true
+      },
+      {
+        "symbol": "PKG",
+        "found": true
+      },
+      {
+        "symbol": "PLTR",
+        "found": true
+      },
+      {
+        "symbol": "PANW",
+        "found": true
+      },
+      {
+        "symbol": "PSKY",
+        "found": true
+      },
+      {
+        "symbol": "PH",
+        "found": true
+      },
+      {
+        "symbol": "PAYX",
+        "found": true
+      },
+      {
+        "symbol": "PYPL",
+        "found": true
+      },
+      {
+        "symbol": "PNR",
+        "found": true
+      },
+      {
+        "symbol": "PEP",
+        "found": true
+      },
+      {
+        "symbol": "PFE",
+        "found": true
+      },
+      {
+        "symbol": "PCG",
+        "found": true
+      },
+      {
+        "symbol": "PM",
+        "found": true
+      },
+      {
+        "symbol": "PSX",
+        "found": true
+      },
+      {
+        "symbol": "PNW",
+        "found": true
+      },
+      {
+        "symbol": "PNC",
+        "found": true
+      },
+      {
+        "symbol": "POOL",
+        "found": true
+      },
+      {
+        "symbol": "PPG",
+        "found": true
+      },
+      {
+        "symbol": "PPL",
+        "found": true
+      },
+      {
+        "symbol": "PFG",
+        "found": true
+      },
+      {
+        "symbol": "PG",
+        "found": true
+      },
+      {
+        "symbol": "PGR",
+        "found": true
+      },
+      {
+        "symbol": "PLD",
+        "found": true
+      },
+      {
+        "symbol": "PRU",
+        "found": true
+      },
+      {
+        "symbol": "PEG",
+        "found": true
+      },
+      {
+        "symbol": "PTC",
+        "found": true
+      },
+      {
+        "symbol": "PSA",
+        "found": true
+      },
+      {
+        "symbol": "PHM",
+        "found": true
+      },
+      {
+        "symbol": "PWR",
+        "found": true
+      },
+      {
+        "symbol": "QCOM",
+        "found": true
+      },
+      {
+        "symbol": "DGX",
+        "found": true
+      },
+      {
+        "symbol": "Q",
+        "found": true
+      },
+      {
+        "symbol": "RL",
+        "found": true
+      },
+      {
+        "symbol": "RJF",
+        "found": true
+      },
+      {
+        "symbol": "RTX",
+        "found": true
+      },
+      {
+        "symbol": "O",
+        "found": true
+      },
+      {
+        "symbol": "REG",
+        "found": true
+      },
+      {
+        "symbol": "REGN",
+        "found": true
+      },
+      {
+        "symbol": "RF",
+        "found": true
+      },
+      {
+        "symbol": "RSG",
+        "found": true
+      },
+      {
+        "symbol": "RMD",
+        "found": true
+      },
+      {
+        "symbol": "RVTY",
+        "found": true
+      },
+      {
+        "symbol": "HOOD",
+        "found": true
+      },
+      {
+        "symbol": "ROK",
+        "found": true
+      },
+      {
+        "symbol": "ROL",
+        "found": true
+      },
+      {
+        "symbol": "ROP",
+        "found": true
+      },
+      {
+        "symbol": "ROST",
+        "found": true
+      },
+      {
+        "symbol": "RCL",
+        "found": true
+      },
+      {
+        "symbol": "SPGI",
+        "found": true
+      },
+      {
+        "symbol": "CRM",
+        "found": true
+      },
+      {
+        "symbol": "SNDK",
+        "found": true
+      },
+      {
+        "symbol": "SBAC",
+        "found": true
+      },
+      {
+        "symbol": "SLB",
+        "found": true
+      },
+      {
+        "symbol": "STX",
+        "found": true
+      },
+      {
+        "symbol": "SRE",
+        "found": true
+      },
+      {
+        "symbol": "NOW",
+        "found": true
+      },
+      {
+        "symbol": "SHW",
+        "found": true
+      },
+      {
+        "symbol": "SPG",
+        "found": true
+      },
+      {
+        "symbol": "SWKS",
+        "found": true
+      },
+      {
+        "symbol": "SJM",
+        "found": true
+      },
+      {
+        "symbol": "SW",
+        "found": true
+      },
+      {
+        "symbol": "SNA",
+        "found": true
+      },
+      {
+        "symbol": "SOLV",
+        "found": true
+      },
+      {
+        "symbol": "SO",
+        "found": true
+      },
+      {
+        "symbol": "LUV",
+        "found": true
+      },
+      {
+        "symbol": "SWK",
+        "found": true
+      },
+      {
+        "symbol": "SBUX",
+        "found": true
+      },
+      {
+        "symbol": "STT",
+        "found": true
+      },
+      {
+        "symbol": "STLD",
+        "found": true
+      },
+      {
+        "symbol": "STE",
+        "found": true
+      },
+      {
+        "symbol": "SYK",
+        "found": true
+      },
+      {
+        "symbol": "SMCI",
+        "found": true
+      },
+      {
+        "symbol": "SYF",
+        "found": true
+      },
+      {
+        "symbol": "SNPS",
+        "found": true
+      },
+      {
+        "symbol": "SYY",
+        "found": true
+      },
+      {
+        "symbol": "TMUS",
+        "found": true
+      },
+      {
+        "symbol": "TROW",
+        "found": true
+      },
+      {
+        "symbol": "TTWO",
+        "found": true
+      },
+      {
+        "symbol": "TPR",
+        "found": true
+      },
+      {
+        "symbol": "TRGP",
+        "found": true
+      },
+      {
+        "symbol": "TGT",
+        "found": true
+      },
+      {
+        "symbol": "TEL",
+        "found": true
+      },
+      {
+        "symbol": "TDY",
+        "found": true
+      },
+      {
+        "symbol": "TER",
+        "found": true
+      },
+      {
+        "symbol": "TSLA",
+        "found": true
+      },
+      {
+        "symbol": "TXN",
+        "found": true
+      },
+      {
+        "symbol": "TPL",
+        "found": true
+      },
+      {
+        "symbol": "TXT",
+        "found": true
+      },
+      {
+        "symbol": "TMO",
+        "found": true
+      },
+      {
+        "symbol": "TJX",
+        "found": true
+      },
+      {
+        "symbol": "TKO",
+        "found": true
+      },
+      {
+        "symbol": "TTD",
+        "found": true
+      },
+      {
+        "symbol": "TSCO",
+        "found": true
+      },
+      {
+        "symbol": "TT",
+        "found": true
+      },
+      {
+        "symbol": "TDG",
+        "found": true
+      },
+      {
+        "symbol": "TRV",
+        "found": true
+      },
+      {
+        "symbol": "TRMB",
+        "found": true
+      },
+      {
+        "symbol": "TFC",
+        "found": true
+      },
+      {
+        "symbol": "TYL",
+        "found": true
+      },
+      {
+        "symbol": "TSN",
+        "found": true
+      },
+      {
+        "symbol": "USB",
+        "found": true
+      },
+      {
+        "symbol": "UBER",
+        "found": true
+      },
+      {
+        "symbol": "UDR",
+        "found": true
+      },
+      {
+        "symbol": "ULTA",
+        "found": true
+      },
+      {
+        "symbol": "UNP",
+        "found": true
+      },
+      {
+        "symbol": "UAL",
+        "found": true
+      },
+      {
+        "symbol": "UPS",
+        "found": true
+      },
+      {
+        "symbol": "URI",
+        "found": true
+      },
+      {
+        "symbol": "UNH",
+        "found": true
+      },
+      {
+        "symbol": "UHS",
+        "found": true
+      },
+      {
+        "symbol": "VLO",
+        "found": true
+      },
+      {
+        "symbol": "VTR",
+        "found": true
+      },
+      {
+        "symbol": "VLTO",
+        "found": true
+      },
+      {
+        "symbol": "VRSN",
+        "found": true
+      },
+      {
+        "symbol": "VRSK",
+        "found": true
+      },
+      {
+        "symbol": "VZ",
+        "found": true
+      },
+      {
+        "symbol": "VRTX",
+        "found": true
+      },
+      {
+        "symbol": "VRT",
+        "found": true
+      },
+      {
+        "symbol": "VTRS",
+        "found": true
+      },
+      {
+        "symbol": "VICI",
+        "found": true
+      },
+      {
+        "symbol": "V",
+        "found": true
+      },
+      {
+        "symbol": "VST",
+        "found": true
+      },
+      {
+        "symbol": "VMC",
+        "found": true
+      },
+      {
+        "symbol": "WRB",
+        "found": true
+      },
+      {
+        "symbol": "GWW",
+        "found": true
+      },
+      {
+        "symbol": "WAB",
+        "found": true
+      },
+      {
+        "symbol": "WMT",
+        "found": true
+      },
+      {
+        "symbol": "DIS",
+        "found": true
+      },
+      {
+        "symbol": "WBD",
+        "found": true
+      },
+      {
+        "symbol": "WM",
+        "found": true
+      },
+      {
+        "symbol": "WAT",
+        "found": true
+      },
+      {
+        "symbol": "WEC",
+        "found": true
+      },
+      {
+        "symbol": "WFC",
+        "found": true
+      },
+      {
+        "symbol": "WELL",
+        "found": true
+      },
+      {
+        "symbol": "WST",
+        "found": true
+      },
+      {
+        "symbol": "WDC",
+        "found": true
+      },
+      {
+        "symbol": "WY",
+        "found": true
+      },
+      {
+        "symbol": "WSM",
+        "found": true
+      },
+      {
+        "symbol": "WMB",
+        "found": true
+      },
+      {
+        "symbol": "WTW",
+        "found": true
+      },
+      {
+        "symbol": "WDAY",
+        "found": true
+      },
+      {
+        "symbol": "WYNN",
+        "found": true
+      },
+      {
+        "symbol": "XEL",
+        "found": true
+      },
+      {
+        "symbol": "XYL",
+        "found": true
+      },
+      {
+        "symbol": "YUM",
+        "found": true
+      },
+      {
+        "symbol": "ZBRA",
+        "found": true
+      },
+      {
+        "symbol": "ZBH",
+        "found": true
+      },
+      {
+        "symbol": "ZTS",
+        "found": true
+      }
+    ]
+  }
+}

@@ -1,11 +1,12 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import { View, StyleSheet, Dimensions } from 'react-native';
-import { Card, Text, Button } from 'react-native-paper';
-import Svg, { Polyline, Line, Text as SvgText } from 'react-native-svg';
+import { Card, Text, Button, TextInput } from 'react-native-paper';
+import Svg, { Polyline, Polygon, Line, Text as SvgText } from 'react-native-svg';
 import { COLORS } from '../../shared/colors';
 import { calculateVolatility } from '../../shared/calculations';
-import { runMonteCarlo } from '../../services/simulations/monteCarlo';
+import { runMonteCarlo, runMonteCarloAsync } from '../../services/simulations/monteCarlo';
 import { runBridgewaterAnalysis } from '../../shared/bridgewaterAnalysis';
+import { ActivityIndicator } from 'react-native-paper';
 
 const CARD_WIDTH = Dimensions.get('window').width - 32;
 const H = 200;
@@ -61,9 +62,21 @@ const MonteCarlo = ({ holdings = [], portfolioValue = 0, horizonYears = 1 }) => 
   const [correlated, setCorrelated] = useState(true);
   const [weightSource, setWeightSource] = useState('current'); // 'current' or 'bridgewater'
   const [Npaths, setNpaths] = useState(1000);
+  const [dist, setDist] = useState('normal'); // 'normal' or 'student'
+  const [studentDf, setStudentDf] = useState(5);
+  const [shrinkageAlpha, setShrinkageAlpha] = useState(0.1);
 
-  const results = useMemo(() => {
-    if (!holdings.length || portfolioValue <= 0) return null;
+  const [results, setResults] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  React.useEffect(() => {
+    let mounted = true;
+    if (!holdings.length || portfolioValue <= 0) {
+      setResults(null);
+      setLoading(false);
+      return () => { mounted = false; };
+    }
+
     // assemble assets for the service
     const computed = holdings.map(h => {
       const quantity = Number(h.quantity) || 0;
@@ -72,26 +85,31 @@ const MonteCarlo = ({ holdings = [], portfolioValue = 0, horizonYears = 1 }) => 
       const cost = Number(h.costBasis ?? h.purchasePrice ?? h.purchaseUnitPrice) || 0;
       const costTotal = quantity * (cost || 0);
       const muAnnual = costTotal > 0 ? ((value - costTotal) / costTotal) * 100 : 0; // percent
-      return { S0: currentPrice, quantity, muAnnual, // sigmaAnnual left undefined - will use Bridgewater when available
-      };
+      return { S0: currentPrice, quantity, muAnnual };
     });
 
-    // choose weights
-    const weights = weightSource === 'bridgewater' && bwResults && bwResults.assets ?
-      bwResults.assets.map(a => a.targetWeight ?? a.currentWeight) :
-      computed.map(c => (c.quantity * c.S0));
-
-    // try to build assets with sigmaAnnual from bridgewater if available
     const assets = computed.map((c, i) => ({
       ...c,
       sigmaAnnual: bwResults && bwResults.assets && bwResults.assets[i] ? (bwResults.assets[i].annualVolatility * 100) : undefined,
     }));
 
-    // pass covDaily from bridgewater if available
     const covDaily = bwResults && bwResults.covarianceMatrix ? bwResults.covarianceMatrix : null;
 
-    const sim = runMonteCarlo({ assets, N: Npaths, steps: Math.round(252 * horizonYears), correlated, covDaily, sampleCount: SAMPLE });
-    return sim;
+    setLoading(true);
+    const args = { assets, N: Npaths, steps: Math.round(252 * horizonYears), correlated, covDaily, sampleCount: SAMPLE, dist, studentDf, shrinkageAlpha };
+    let cancelled = false;
+
+    runMonteCarloAsync(args).then((sim) => {
+      if (!mounted || cancelled) return;
+      setResults(sim);
+      setLoading(false);
+    }).catch(() => {
+      if (!mounted || cancelled) return;
+      setResults(null);
+      setLoading(false);
+    });
+
+    return () => { mounted = false; cancelled = true; };
   }, [holdings, portfolioValue, horizonYears, runKey, bwResults, correlated, weightSource, Npaths]);
 
   // fetch Bridgewater analysis (async) to obtain covariance and per-asset vols
@@ -116,8 +134,33 @@ const MonteCarlo = ({ holdings = [], portfolioValue = 0, horizonYears = 1 }) => 
     return () => { mounted = false; };
   }, [holdings]);
 
+  if (!results && loading) {
+    return (
+      <View style={styles.container}>
+        <Card style={styles.card}>
+          <Card.Content>
+            <View style={styles.headerRow}>
+              <View>
+                <Text style={styles.title}>Monte Carlo</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <ActivityIndicator animating={true} size={18} />
+                  <Text style={styles.subtitle}>Simulating…</Text>
+                </View>
+              </View>
+              <Button mode="outlined" compact onPress={() => setRunKey(k => k + 1)}
+                style={styles.runBtn} labelStyle={styles.runBtnLabel}>
+                Re-run
+              </Button>
+            </View>
+          </Card.Content>
+        </Card>
+      </View>
+    );
+  }
+
   if (!results) return null;
-  const { samplePaths, pathP10, pathP50, pathP90, p10, p50, p90, probLoss, avgMaxDd, steps } = results;
+
+  const { samplePaths, pathP10, pathP50, pathP90, p10, p50, p90, probLoss, avgMaxDd, steps, cvar95 } = results;
 
   // chart scale
   const allFlat = [...pathP10, ...pathP50, ...pathP90];
@@ -171,12 +214,56 @@ const MonteCarlo = ({ holdings = [], portfolioValue = 0, horizonYears = 1 }) => 
           <View style={styles.headerRow}>
             <View>
               <Text style={styles.title}>Monte Carlo</Text>
-              <Text style={styles.subtitle}>1,000 simulated paths · {horizonYears}yr horizon</Text>
+              <Text style={styles.subtitle}>{Npaths.toLocaleString()} simulated paths · {horizonYears}yr horizon</Text>
             </View>
-            <Button mode="outlined" compact onPress={() => setRunKey(k => k + 1)}
-              style={styles.runBtn} labelStyle={styles.runBtnLabel}>
-              Re-run
-            </Button>
+            <View style={{ alignItems: 'flex-end' }}>
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 6 }}>
+                <Button mode={dist === 'normal' ? 'contained' : 'outlined'} compact onPress={() => setDist('normal')}>
+                  Normal
+                </Button>
+                <Button mode={dist === 'student' ? 'contained' : 'outlined'} compact onPress={() => setDist('student')}>
+                  Student-t
+                </Button>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                {dist === 'student' && (
+                  <Text style={{ fontSize: 12, color: COLORS.textSecondary, marginRight: 8 }}>df: {studentDf}</Text>
+                )}
+                <Button mode="outlined" compact onPress={() => setRunKey(k => k + 1)}
+                  style={styles.runBtn} labelStyle={styles.runBtnLabel}>
+                  Re-run
+                </Button>
+              </View>
+            </View>
+          </View>
+
+          {/* Controls */}
+          <View style={styles.controlsRow}>
+            <View style={styles.controlsLeft}>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {[100, 1000, 5000].map(v => (
+                  <Button key={v} mode={Npaths === v ? 'contained' : 'outlined'} compact onPress={() => setNpaths(v)}>
+                    {v.toLocaleString()}
+                  </Button>
+                ))}
+              </View>
+              <View style={{ flexDirection: 'row', marginTop: 8, gap: 8, alignItems: 'center' }}>
+                <Button mode={correlated ? 'contained' : 'outlined'} compact onPress={() => setCorrelated(c => !c)}>
+                  {correlated ? 'Correlated' : 'Independent'}
+                </Button>
+                <TextInput style={styles.smallInput} label="Shrinkage" value={String(shrinkageAlpha)} onChangeText={t => setShrinkageAlpha(Math.max(0, Math.min(1, Number(t) || 0)))} keyboardType="numeric" dense />
+                {dist === 'student' && (
+                  <TextInput style={styles.smallInput} label="df" value={String(studentDf)} onChangeText={t => setStudentDf(Math.max(1, Number(t) || 1))} keyboardType="numeric" dense />
+                )}
+              </View>
+            </View>
+            <View style={styles.controlsRight}>
+              <View style={{ flexDirection: 'row' }}>
+                <Button mode={dist === 'normal' ? 'contained' : 'outlined'} compact onPress={() => setDist('normal')}>Normal</Button>
+                <Button mode={dist === 'student' ? 'contained' : 'outlined'} compact onPress={() => setDist('student')}>Student-t</Button>
+              </View>
+              <Button mode="outlined" compact onPress={() => setRunKey(k => k + 1)} style={styles.runBtn} labelStyle={styles.runBtnLabel}>Re-run</Button>
+            </View>
           </View>
 
           {/* Legend */}
@@ -218,6 +305,16 @@ const MonteCarlo = ({ holdings = [], portfolioValue = 0, horizonYears = 1 }) => 
               return <Polyline key={i} points={p} fill="none"
                 stroke="#888780" strokeWidth={0.5} strokeOpacity={0.1} />;
             })}
+            {/* percentile band (P10-P90) */}
+            {pathP10 && pathP90 && (() => {
+              const up = sanitizeSeries(pathP90) || [];
+              const down = (sanitizeSeries(pathP10) || []).slice().reverse();
+              if (up.length && down.length && up.length === down.length) {
+                const points = up.map((v, i) => `${mx(i)},${my(v)}`).concat(down.map((v, i) => `${mx(up.length - 1 - i)},${my(v)}`)).join(' ');
+                return <Polygon points={points} fill="#E24B4A" fillOpacity={0.06} stroke="none" />;
+              }
+              return null;
+            })()}
             {/* percentile paths */}
             <Polyline points={pts(pathP10)} fill="none" stroke="#E24B4A" strokeWidth={2} />
             <Polyline points={pts(pathP50)} fill="none" stroke={COLORS.textPrimary} strokeWidth={2} />
@@ -259,6 +356,10 @@ const MonteCarlo = ({ holdings = [], portfolioValue = 0, horizonYears = 1 }) => 
             <View style={styles.metricPill}>
               <Text style={styles.metricPillLabel}>Avg max drawdown</Text>
               <Text style={[styles.metricPillVal, { color: ddColor }]}>{fmtPct(avgMaxDd)}</Text>
+            </View>
+            <View style={styles.metricPill}>
+              <Text style={styles.metricPillLabel}>CVaR (95%)</Text>
+              <Text style={[styles.metricPillVal, { color: '#E24B4A' }]}>{fmt(cvar95)}</Text>
             </View>
           </View>
 
@@ -302,6 +403,10 @@ const styles = StyleSheet.create({
     borderColor: '#1F1F1F', borderWidth: 1,
     borderRadius: 16, padding: 10,
   },
+  controlsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
+  controlsLeft: { flex: 1 },
+  controlsRight: { alignItems: 'flex-end', justifyContent: 'space-between' },
+  smallInput: { width: 84 },
   metricPillLabel: { fontSize: 11, color: COLORS.textSecondary, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 3 },
   metricPillVal: { fontSize: 15, fontWeight: '700' },
   disclaimer: { fontSize: 11, color: COLORS.textDisabled, fontStyle: 'italic', textAlign: 'center', marginTop: 4 },

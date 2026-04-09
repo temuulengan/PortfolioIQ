@@ -1,0 +1,105 @@
+{
+  "timestamp": "2026-04-09T06:27:10.639Z",
+  "probes": {
+    "searchLatency": {
+      "count": 40,
+      "min": 55,
+      "median": 57,
+      "p95": 60,
+      "p99": 62,
+      "max": 348,
+      "mean": 64.3
+    },
+    "chartLatency": {
+      "count": 40,
+      "min": 54,
+      "median": 56,
+      "p95": 61,
+      "p99": 78,
+      "max": 268,
+      "mean": 61.75
+    },
+    "dataFreshness": {
+      "ok": true,
+      "serverTs": 1775678403000,
+      "ageMs": 37636837
+    },
+    "rateLimit": {
+      "attempts": 80,
+      "count429": 0,
+      "errors": 0
+    },
+    "throughput": {
+      "symbolsTried": 40,
+      "completed": 40,
+      "durationSec": 1.299,
+      "rps": 30.792917628945343
+    },
+    "coverage": {
+      "total": 15,
+      "foundCount": 14,
+      "results": [
+        {
+          "symbol": "AAPL",
+          "found": true
+        },
+        {
+          "symbol": "MSFT",
+          "found": true
+        },
+        {
+          "symbol": "GOOGL",
+          "found": true
+        },
+        {
+          "symbol": "0005.HK",
+          "found": true
+        },
+        {
+          "symbol": "0700.HK",
+          "found": true
+        },
+        {
+          "symbol": "TSLA",
+          "found": true
+        },
+        {
+          "symbol": "BTC-USD",
+          "found": true
+        },
+        {
+          "symbol": "ETH-USD",
+          "found": true
+        },
+        {
+          "symbol": "GOOG",
+          "found": true
+        },
+        {
+          "symbol": "BABA",
+          "found": true
+        },
+        {
+          "symbol": "RYCEY",
+          "found": true
+        },
+        {
+          "symbol": "RDS-A",
+          "found": false
+        },
+        {
+          "symbol": "VOD.L",
+          "found": true
+        },
+        {
+          "symbol": "HSBA.L",
+          "found": true
+        },
+        {
+          "symbol": "BHP",
+          "found": true
+        }
+      ]
+    }
+  }
+}

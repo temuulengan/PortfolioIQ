@@ -390,6 +390,7 @@ const PortfoliosScreen = ({ navigation }) => {
         style={styles.fab}
         icon="plus"
         label="Create Portfolio"
+        color={COLORS.textWhite}
         onPress={handleCreatePortfolio}
       />
 

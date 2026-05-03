@@ -245,9 +245,9 @@ const AnalyticsScreen = () => {
       <Card style={styles.card}>
         <Card.Content>
           <Text style={styles.sectionTitle}>Top Performers</Text>
-          {topPerformers.map((holding, index) => {
+            {topPerformers.map((holding, index) => {
             const gainLossPercent = calculateGainLossPercent(
-              holding.purchasePrice,
+              holding.purchasePrice ?? holding.avgCost ?? 0,
               holding.currentPrice
             );
             const isPositive = gainLossPercent >= 0;
@@ -282,7 +282,7 @@ const AnalyticsScreen = () => {
             <Text style={styles.sectionTitle}>Bottom Performers</Text>
             {bottomPerformers.map((holding, index) => {
               const gainLossPercent = calculateGainLossPercent(
-                holding.purchasePrice,
+                holding.purchasePrice ?? holding.avgCost ?? 0,
                 holding.currentPrice
               );
               const isPositive = gainLossPercent >= 0;

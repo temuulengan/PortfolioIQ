@@ -29,14 +29,19 @@ const boxMullerWithRng = (rng) => {
 };
 
 // Gamma sampler (Marsaglia & Tsang) for shape > 0
+// Rewritten to avoid recursive fallback for alpha < 1 which can contribute
+// to deep call stacks in extreme cases.
 const gammaSample = (alpha, scale, rng) => {
   if (alpha <= 0) return 0;
-  if (alpha < 1) {
-    // boost using gamma(alpha+1) then multiply by u^(1/alpha)
-    const u = rng();
-    return gammaSample(alpha + 1, scale, rng) * Math.pow(u, 1 / alpha);
+  // If alpha < 1, use the boost technique but iteratively
+  let boost = 1;
+  let a = alpha;
+  if (a < 1) {
+    const u = rng() || 1e-12;
+    boost = Math.pow(u, 1 / a);
+    a += 1; // now a >= 1 (or closer)
   }
-  const d = alpha - 1 / 3;
+  const d = a - 1 / 3;
   const c = 1 / Math.sqrt(9 * d);
   while (true) {
     let x, v;
@@ -46,8 +51,8 @@ const gammaSample = (alpha, scale, rng) => {
     } while (v <= 0);
     v = v * v * v;
     const u = rng();
-    if (u < 1 - 0.0331 * (x * x) * (x * x)) return d * v * scale;
-    if (Math.log(u) < 0.5 * x * x + d * (1 - v + Math.log(v))) return d * v * scale;
+    if (u < 1 - 0.0331 * (x * x) * (x * x)) return d * v * scale * boost;
+    if (Math.log(u) < 0.5 * x * x + d * (1 - v + Math.log(v))) return d * v * scale * boost;
   }
 };
 
@@ -135,6 +140,12 @@ export function runMonteCarlo({ assets = [], N = 1000, steps = 252, correlated =
   const nAssets = assets.length;
   if (!nAssets) return null;
 
+  // Safety clamps to avoid runaway memory/compute causing stack/heap failures
+  const MAX_PATHS = 200000; // upper hard cap
+  const MAX_STEPS = 2000;
+  N = Math.max(0, Math.min(Number(N) || 0, MAX_PATHS));
+  steps = Math.max(1, Math.min(Number(steps) || 1, MAX_STEPS));
+
   // prepare RNG
   const rng = seed ? mulberry32(Number(seed) >>> 0) : Math.random;
 
@@ -186,8 +197,10 @@ export function runMonteCarlo({ assets = [], N = 1000, steps = 252, correlated =
     L = cholesky(cov);
   }
 
+  // pick sample indices using the same RNG (if seeded) for reproducibility
   const sampleIdxs = new Set();
-  while (sampleIdxs.size < Math.min(sampleCount, N)) sampleIdxs.add(Math.floor(Math.random() * N));
+  const desiredSamples = Math.min(sampleCount, N);
+  while (sampleIdxs.size < desiredSamples) sampleIdxs.add(Math.floor((rng() || Math.random()) * N));
   const sampleIdxArr = Array.from(sampleIdxs);
 
   const allFinal = new Array(N);

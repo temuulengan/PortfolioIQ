@@ -16,6 +16,7 @@ import NotificationsScreen from '../screens/NotificationsScreen';
 import AnalyticsScreen from '../screens/AnalyticsScreen';
 import RiskScreen from '../screens/RiskScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import FileUploadScreen from '../screens/FileUploadScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -93,6 +94,11 @@ const AppNavigator = () => {
                 headerShown: false,
                 presentation: 'card'
               }}
+            />
+            <Stack.Screen 
+              name="FileUpload" 
+              component={FileUploadScreen}
+              options={{ headerShown: true, title: 'Import Portfolio' }}
             />
           </>
         )}

@@ -93,25 +93,38 @@ export const PortfolioProvider = ({ children }) => {
           if (symbols.length > 0) {
             const pricesData = await getMultipleStockPrices(symbols);
 
-            const updatedHoldings = await Promise.all(visibleHoldings.map(async (holding) => {
+            // Compute updated holdings quickly (do not await Firestore writes)
+            const now = new Date().toISOString();
+            const updatedHoldings = visibleHoldings.map((holding) => {
               const priceObj = pricesData.find(p => p.symbol === holding.symbol);
               if (priceObj && priceObj.price) {
-                const updated = { ...holding, currentPrice: priceObj.price, lastUpdated: new Date().toISOString() };
-                try {
-                  await updateHolding(holding.id, { currentPrice: priceObj.price, lastUpdated: updated.lastUpdated });
-                } catch (err) {
-                  // persist failure should not block UI
-                  console.error(`Failed to persist updated price for ${holding.symbol}:`, err.message || err);
-                }
-                return updated;
+                return { ...holding, currentPrice: priceObj.price, lastUpdated: now };
               }
               return holding;
-            }));
+            });
 
-            // Only commit if this fetch is still current
+            // Commit to UI immediately if still current
             if (localFetchId === fetchIdRef.current) {
               setHoldings(updatedHoldings.filter(h => h.portfolioId === portfolioId));
               setIsLoadingHoldings(false);
+
+              // Persist price updates in background without blocking the UI/fetch lifecycle
+              (async () => {
+                try {
+                  await Promise.all(updatedHoldings.map(async (holding) => {
+                    const orig = visibleHoldings.find(h => h.id === holding.id) || {};
+                    if (holding.currentPrice !== orig.currentPrice) {
+                      try {
+                        await updateHolding(holding.id, { currentPrice: holding.currentPrice, lastUpdated: holding.lastUpdated });
+                      } catch (err) {
+                        console.error(`Failed to persist updated price for ${holding.symbol}:`, err.message || err);
+                      }
+                    }
+                  }));
+                } catch (err) {
+                  console.error('Background price persist failed:', err);
+                }
+              })();
             } else {
               // stale result
               console.warn('Stale holdings fetch result discarded for', portfolioId);
@@ -147,7 +160,8 @@ export const PortfolioProvider = ({ children }) => {
 
   const createNewPortfolio = async (portfolioData) => {
     try {
-      const newPortfolio = await createPortfolio(user.uid, portfolioData);
+      // createPortfolio service reads current user internally; pass only portfolio data
+      const newPortfolio = await createPortfolio(portfolioData);
       setPortfolios([...portfolios, newPortfolio]);
       // clear holdings and prepare for new selection
       fetchIdRef.current += 1;
@@ -332,6 +346,7 @@ export const PortfolioProvider = ({ children }) => {
         refreshing,
         isRefreshingPrices,
         loadPortfolios,
+          loadHoldings,
         createNewPortfolio,
         updateExistingPortfolio,
         deleteExistingPortfolio,

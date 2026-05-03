@@ -1,297 +1,209 @@
-/**
- * Portfolio and Investment Calculation Functions
- */
+// Portfolio and Investment Calculation Functions
+
+// Helpers
+const toNumber = (v) => {
+  if (v == null) return 0;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const pickPurchasePrice = (holdingOrPrice, fallback) => {
+  // Accept either a holding object or a raw price
+  if (typeof holdingOrPrice === 'object' && holdingOrPrice !== null) {
+    return toNumber(holdingOrPrice.purchasePrice ?? holdingOrPrice.avgCost ?? fallback ?? 0);
+  }
+  return toNumber(holdingOrPrice ?? fallback ?? 0);
+};
 
 // ==================== BASIC CALCULATIONS ====================
 
-/**
- * Calculate total value of a holding
- */
 export const calculateHoldingValue = (quantity, currentPrice, purchasePrice = 0, holdingId = null) => {
-  // Use currentPrice when available and finite; otherwise fall back to purchasePrice.
-  const usePrice = Number.isFinite(currentPrice) ? currentPrice : (Number.isFinite(purchasePrice) ? purchasePrice : 0);
-  if (!Number.isFinite(currentPrice) && Number.isFinite(purchasePrice)) {
+  const q = toNumber(quantity);
+  const c = Number.isFinite(currentPrice) ? currentPrice : null;
+  const p = Number.isFinite(purchasePrice) ? purchasePrice : null;
+  const usePrice = c != null ? c : (p != null ? p : 0);
+  if (c == null && p != null) {
     console.warn(`Holding ${holdingId || ''} missing currentPrice; falling back to purchasePrice in value calc.`);
   }
-  return quantity * usePrice;
+  return q * usePrice;
 };
 
-/**
- * Calculate total cost basis of a holding
- */
 export const calculateCostBasis = (quantity, purchasePrice) => {
-  return quantity * purchasePrice;
+  return toNumber(quantity) * toNumber(purchasePrice);
 };
 
-/**
- * Calculate gain/loss for a holding
- */
 export const calculateGainLoss = (quantity, purchasePrice, currentPrice) => {
   const costBasis = calculateCostBasis(quantity, purchasePrice);
   const currentValue = calculateHoldingValue(quantity, currentPrice, purchasePrice);
   return currentValue - costBasis;
 };
 
-/**
- * Calculate percentage gain/loss for a holding
- */
 export const calculateGainLossPercent = (purchasePrice, currentPrice) => {
-  return ((currentPrice - purchasePrice) / purchasePrice) * 100;
+  const p = toNumber(purchasePrice);
+  const c = toNumber(currentPrice);
+  if (p === 0) return 0;
+  return ((c - p) / p) * 100;
 };
 
-/**
- * Calculate day change for a holding
- */
 export const calculateDayChange = (quantity, previousClose, currentPrice) => {
-  return quantity * (currentPrice - previousClose);
+  return toNumber(quantity) * (toNumber(currentPrice) - toNumber(previousClose));
 };
 
-/**
- * Calculate day change percentage
- */
 export const calculateDayChangePercent = (previousClose, currentPrice) => {
-  return ((currentPrice - previousClose) / previousClose) * 100;
+  const prev = toNumber(previousClose);
+  if (prev === 0) return 0;
+  return ((toNumber(currentPrice) - prev) / prev) * 100;
 };
 
 // ==================== PORTFOLIO CALCULATIONS ====================
 
-/**
- * Calculate total portfolio value
- */
 export const calculatePortfolioValue = (holdings) => {
-  return holdings.reduce((total, holding) => {
-    return total + calculateHoldingValue(holding.quantity, holding.currentPrice, holding.purchasePrice, holding.id);
+  if (!Array.isArray(holdings) || holdings.length === 0) return 0;
+  return holdings.reduce((total, h) => {
+    const purchase = h.purchasePrice ?? h.avgCost ?? 0;
+    return total + calculateHoldingValue(h.quantity, h.currentPrice, purchase, h.id);
   }, 0);
 };
 
-/**
- * Calculate total portfolio cost basis
- */
 export const calculatePortfolioCostBasis = (holdings) => {
-  return holdings.reduce((total, holding) => {
-    return total + calculateCostBasis(holding.quantity, holding.purchasePrice);
+  if (!Array.isArray(holdings) || holdings.length === 0) return 0;
+  return holdings.reduce((total, h) => {
+    const purchase = h.purchasePrice ?? h.avgCost ?? 0;
+    return total + calculateCostBasis(h.quantity, purchase);
   }, 0);
 };
 
-/**
- * Calculate total portfolio gain/loss
- */
 export const calculatePortfolioGainLoss = (holdings) => {
   const currentValue = calculatePortfolioValue(holdings);
   const costBasis = calculatePortfolioCostBasis(holdings);
   return currentValue - costBasis;
 };
 
-/**
- * Calculate portfolio gain/loss percentage
- */
 export const calculatePortfolioGainLossPercent = (holdings) => {
   const costBasis = calculatePortfolioCostBasis(holdings);
+  if (!Number.isFinite(costBasis) || costBasis === 0) return 0;
   const gainLoss = calculatePortfolioGainLoss(holdings);
   return (gainLoss / costBasis) * 100;
 };
 
-/**
- * Calculate total portfolio day change
- */
 export const calculatePortfolioDayChange = (holdings) => {
-  return holdings.reduce((total, holding) => {
-    const prevClose = Number.isFinite(holding.currentPrice) ? (holding.currentPrice / (1 + (holding.dayChangePercent || 0) / 100)) : holding.previousClose || holding.purchasePrice || 0;
-    const current = Number.isFinite(holding.currentPrice) ? holding.currentPrice : (holding.purchasePrice || 0);
-    return total + calculateDayChange(holding.quantity, prevClose, current);
+  if (!Array.isArray(holdings) || holdings.length === 0) return 0;
+  return holdings.reduce((total, h) => {
+    const prevClose = Number.isFinite(h.currentPrice)
+      ? (h.currentPrice / (1 + (h.dayChangePercent || 0) / 100))
+      : (h.previousClose ?? h.purchasePrice ?? h.avgCost ?? 0);
+    const current = Number.isFinite(h.currentPrice) ? h.currentPrice : (h.purchasePrice ?? h.avgCost ?? 0);
+    return total + calculateDayChange(h.quantity, prevClose, current);
   }, 0);
 };
 
 // ==================== ALLOCATION CALCULATIONS ====================
 
-/**
- * Calculate allocation percentage for each holding
- */
 export const calculateAllocation = (holdings) => {
   const totalValue = calculatePortfolioValue(holdings);
   if (!Number.isFinite(totalValue) || totalValue === 0) {
-    return holdings.map(holding => ({ ...holding, allocationPercent: 0, value: calculateHoldingValue(holding.quantity, holding.currentPrice, holding.purchasePrice, holding.id) }));
+    return (holdings || []).map(h => ({ ...h, allocationPercent: 0, value: calculateHoldingValue(h.quantity, h.currentPrice, h.purchasePrice ?? h.avgCost ?? 0, h.id) }));
   }
-  return holdings.map(holding => {
-    const holdingValue = calculateHoldingValue(holding.quantity, holding.currentPrice, holding.purchasePrice, holding.id);
-    return {
-      ...holding,
-      allocationPercent: (holdingValue / totalValue) * 100,
-      value: holdingValue,
-    };
+  return holdings.map(h => {
+    const purchase = h.purchasePrice ?? h.avgCost ?? 0;
+    const holdingValue = calculateHoldingValue(h.quantity, h.currentPrice, purchase, h.id);
+    return { ...h, allocationPercent: (holdingValue / totalValue) * 100, value: holdingValue };
   });
 };
 
-/**
- * Group holdings by asset type and calculate allocation
- */
 export const calculateAssetTypeAllocation = (holdings) => {
   const totalValue = calculatePortfolioValue(holdings);
   const typeGroups = {};
-
-  holdings.forEach(holding => {
-    const type = holding.assetType || 'stock';
-    const value = calculateHoldingValue(holding.quantity, holding.currentPrice, holding.purchasePrice, holding.id);
-    
-    if (!typeGroups[type]) {
-      typeGroups[type] = {
-        type: type,
-        value: 0,
-        count: 0,
-      };
-    }
-    
+  (holdings || []).forEach(h => {
+    const type = h.assetType || 'stock';
+    const purchase = h.purchasePrice ?? h.avgCost ?? 0;
+    const value = calculateHoldingValue(h.quantity, h.currentPrice, purchase, h.id);
+    if (!typeGroups[type]) typeGroups[type] = { type, value: 0, count: 0 };
     typeGroups[type].value += value;
     typeGroups[type].count += 1;
   });
-
-  return Object.values(typeGroups).map(group => ({
-    ...group,
-    allocationPercent: (group.value / totalValue) * 100,
-  }));
+  return Object.values(typeGroups).map(g => ({ ...g, allocationPercent: (!Number.isFinite(totalValue) || totalValue === 0) ? 0 : (g.value / totalValue) * 100 }));
 };
 
-/**
- * Group holdings by sector (simplified - would need sector data from API)
- */
 export const calculateSectorAllocation = (holdings) => {
   const totalValue = calculatePortfolioValue(holdings);
   const sectorGroups = {};
-
-  holdings.forEach(holding => {
-    const sector = holding.sector || 'Unknown';
-    const value = calculateHoldingValue(holding.quantity, holding.currentPrice, holding.purchasePrice, holding.id);
-    
-    if (!sectorGroups[sector]) {
-      sectorGroups[sector] = {
-        sector: sector,
-        value: 0,
-        count: 0,
-      };
-    }
-    
+  (holdings || []).forEach(h => {
+    const sector = h.sector || 'Unknown';
+    const purchase = h.purchasePrice ?? h.avgCost ?? 0;
+    const value = calculateHoldingValue(h.quantity, h.currentPrice, purchase, h.id);
+    if (!sectorGroups[sector]) sectorGroups[sector] = { sector, value: 0, count: 0 };
     sectorGroups[sector].value += value;
     sectorGroups[sector].count += 1;
   });
-
-  return Object.values(sectorGroups).map(group => ({
-    ...group,
-    allocationPercent: (group.value / totalValue) * 100,
-  }));
+  return Object.values(sectorGroups).map(g => ({ ...g, allocationPercent: (!Number.isFinite(totalValue) || totalValue === 0) ? 0 : (g.value / totalValue) * 100 }));
 };
 
 // ==================== PERFORMANCE CALCULATIONS ====================
 
-/**
- * Calculate annualized return
- */
 export const calculateAnnualizedReturn = (startValue, endValue, years) => {
+  if (!Number.isFinite(startValue) || startValue === 0) return 0;
   return (Math.pow(endValue / startValue, 1 / years) - 1) * 100;
 };
 
-/**
- * Calculate top performers
- */
 export const getTopPerformers = (holdings, count = 5) => {
-  return [...holdings]
-    .sort((a, b) => {
-      const gainA = calculateGainLossPercent(a.purchasePrice, a.currentPrice);
-      const gainB = calculateGainLossPercent(b.purchasePrice, b.currentPrice);
-      return gainB - gainA;
-    })
-    .slice(0, count);
+  return [...(holdings || [])].sort((a, b) => {
+    const gainA = calculateGainLossPercent(a.purchasePrice ?? a.avgCost ?? 0, a.currentPrice);
+    const gainB = calculateGainLossPercent(b.purchasePrice ?? b.avgCost ?? 0, b.currentPrice);
+    return gainB - gainA;
+  }).slice(0, count);
 };
 
-/**
- * Calculate bottom performers
- */
 export const getBottomPerformers = (holdings, count = 5) => {
-  return [...holdings]
-    .sort((a, b) => {
-      const gainA = calculateGainLossPercent(a.purchasePrice, a.currentPrice);
-      const gainB = calculateGainLossPercent(b.purchasePrice, b.currentPrice);
-      return gainA - gainB;
-    })
-    .slice(0, count);
+  return [...(holdings || [])].sort((a, b) => {
+    const gainA = calculateGainLossPercent(a.purchasePrice ?? a.avgCost ?? 0, a.currentPrice);
+    const gainB = calculateGainLossPercent(b.purchasePrice ?? b.avgCost ?? 0, b.currentPrice);
+    return gainA - gainB;
+  }).slice(0, count);
 };
 
 // ==================== RISK CALCULATIONS ====================
 
-/**
- * Calculate portfolio volatility (standard deviation of returns)
- * Note: This is simplified - real calculation would use historical returns
- */
 export const calculateVolatility = (holdings) => {
-  const returns = holdings.map(holding => 
-    calculateGainLossPercent(holding.purchasePrice, holding.currentPrice)
-  );
-
-  const mean = returns.reduce((sum, ret) => sum + ret, 0) / returns.length;
-  const variance = returns.reduce((sum, ret) => sum + Math.pow(ret - mean, 2), 0) / returns.length;
-  
+  if (!Array.isArray(holdings) || holdings.length === 0) return 0;
+  const returns = holdings.map(h => calculateGainLossPercent(h.purchasePrice ?? h.avgCost ?? 0, h.currentPrice));
+  const mean = returns.reduce((s, v) => s + v, 0) / returns.length;
+  const variance = returns.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / returns.length;
   return Math.sqrt(variance);
 };
 
-/**
- * Calculate portfolio beta (weighted average of individual betas)
- */
 export const calculatePortfolioBeta = (holdings) => {
   const totalValue = calculatePortfolioValue(holdings);
-  
-  return holdings.reduce((weightedBeta, holding) => {
-    const weight = calculateHoldingValue(holding.quantity, holding.currentPrice, holding.purchasePrice, holding.id) / totalValue;
-    const beta = holding.beta || 1.0; // Default to market beta
+  if (!Number.isFinite(totalValue) || totalValue === 0) return 0;
+  return (holdings || []).reduce((weightedBeta, h) => {
+    const purchase = h.purchasePrice ?? h.avgCost ?? 0;
+    const weight = calculateHoldingValue(h.quantity, h.currentPrice, purchase, h.id) / totalValue;
+    const beta = h.beta ?? 1.0;
     return weightedBeta + (weight * beta);
   }, 0);
 };
 
-/**
- * Calculate Sharpe Ratio
- * (Return - Risk-free rate) / Standard Deviation
- */
 export const calculateSharpeRatio = (portfolioReturn, riskFreeRate, volatility) => {
+  if (!volatility) return 0;
   return (portfolioReturn - riskFreeRate) / volatility;
 };
 
-/**
- * Calculate concentration risk (percentage in top 3 holdings)
- */
 export const calculateConcentrationRisk = (holdings) => {
   const allocations = calculateAllocation(holdings);
-  const topThree = allocations
-    .sort((a, b) => b.allocationPercent - a.allocationPercent)
-    .slice(0, 3);
-  
-  return topThree.reduce((sum, holding) => sum + holding.allocationPercent, 0);
+  const topThree = allocations.sort((a, b) => b.allocationPercent - a.allocationPercent).slice(0, 3);
+  return topThree.reduce((s, h) => s + (h.allocationPercent || 0), 0);
 };
 
-// ==================== DIVERSIFICATION CALCULATIONS ====================
-
-/**
- * Calculate diversification score (0-100)
- * Based on number of holdings and allocation distribution
- */
 export const calculateDiversificationScore = (holdings) => {
-  if (holdings.length === 0) return 0;
+  if (!holdings || holdings.length === 0) return 0;
   if (holdings.length === 1) return 20;
-
   const allocations = calculateAllocation(holdings);
-  const maxAllocation = Math.max(...allocations.map(h => h.allocationPercent));
-  
-  // Score based on number of holdings (max 50 points)
+  const maxAllocation = Math.max(...allocations.map(h => h.allocationPercent || 0));
   const countScore = Math.min(50, holdings.length * 5);
-  
-  // Score based on distribution (max 50 points)
-  // Lower max allocation = better distribution
   const distributionScore = Math.max(0, 50 - maxAllocation);
-  
   return Math.min(100, countScore + distributionScore);
 };
 
-/**
- * Check if portfolio is well-diversified
- */
 export const isDiversified = (holdings) => {
-  const score = calculateDiversificationScore(holdings);
-  return score >= 60;
+  return calculateDiversificationScore(holdings) >= 60;
 };

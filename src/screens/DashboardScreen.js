@@ -1,4 +1,4 @@
-import React, { useContext, useEffect } from 'react';
+import React, { useContext, useEffect, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,22 +6,13 @@ import {
   RefreshControl,
   TouchableOpacity,
 } from 'react-native';
-import {
-  Text,
-  Title,
-  Card,
-  FAB,
-  Surface,
-  ActivityIndicator,
-  Chip,
-  Badge,
-} from 'react-native-paper';
+import { Text, Title, Card, FAB, Surface, ActivityIndicator, Chip, Badge } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import AIInsights from '../components/AIInsights';
+import MonteCarlo from '../components/MonteCarlo';
 import { PortfolioContext } from '../context/PortfolioContext';
 import { AuthContext } from '../context/AuthContext';
 import { NotificationContext } from '../context/NotificationContext';
-import AIInsights from '../components/AIInsights';
-import MonteCarlo from '../components/MonteCarlo';
 import { formatCurrency, formatPercent } from '../../shared/helpers';
 import { COLORS, getGainLossColor } from '../../shared/colors';
 import {
@@ -49,11 +40,9 @@ const DashboardScreen = ({ navigation }) => {
     refreshPrices,
   } = useContext(PortfolioContext);
   const { unreadCount } = useContext(NotificationContext);
-  const [previousValue, setPreviousValue] = React.useState(null);
-
   useEffect(() => {
     loadPortfolios();
-  }, []);
+  }, [loadPortfolios]);
   
   // Check for milestones when total value changes (only when holdings finished loading)
   const totalValue = isLoadingHoldings ? null : calculatePortfolioValue(holdings);
@@ -71,11 +60,13 @@ const DashboardScreen = ({ navigation }) => {
 
   const costBasis = isLoadingHoldings ? null : calculatePortfolioCostBasis(holdings);
   const gainLoss = isLoadingHoldings ? null : calculatePortfolioGainLoss(holdings);
-  const gainLossPercent = (!isLoadingHoldings && holdings.length > 0) ? calculatePortfolioGainLossPercent(holdings) : 0;
-  const isPositive = gainLoss >= 0;
+  const gainLossPercent = (!isLoadingHoldings && holdings.length > 0)
+    ? calculatePortfolioGainLossPercent(holdings)
+    : null;
+  const isPositive = !isLoadingHoldings && gainLoss >= 0;
 
-  const topPerformers = getTopPerformers(holdings, 3);
-  const allocations = calculateAllocation(holdings).slice(0, 5);
+  const topPerformers = useMemo(() => (!isLoadingHoldings ? getTopPerformers(holdings, 3) : []), [holdings, isLoadingHoldings]);
+  const allocations = useMemo(() => (!isLoadingHoldings ? calculateAllocation(holdings).slice(0, 5) : []), [holdings, isLoadingHoldings]);
 
   if (loading && portfolios.length === 0) {
     return (
@@ -88,10 +79,10 @@ const DashboardScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <ScrollView
+        <ScrollView
         style={styles.scrollView}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          <RefreshControl refreshing={refreshing || isRefreshingPrices} onRefresh={handleRefresh} />
         }
       >
         <View style={styles.header}>
@@ -154,7 +145,7 @@ const DashboardScreen = ({ navigation }) => {
                       { color: getGainLossColor(isPositive) },
                     ]}
                   >
-                    {isLoadingHoldings ? '—' : formatPercent(gainLossPercent)}
+                    {isLoadingHoldings || gainLossPercent == null ? '—' : formatPercent(gainLossPercent)}
                   </Text>
                 </View>
               </View>

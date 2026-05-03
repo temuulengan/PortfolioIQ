@@ -175,9 +175,13 @@ export const getStockStatistics = async (symbol) => {
  */
 export const validateStockSymbol = async (symbol) => {
   try {
-    await getStockPrice(symbol);
-    return true;
-  } catch (error) {
+    // Try a lightweight search instead of fetching the full chart which logs on 404.
+    const results = await searchStocks(symbol);
+    if (!results || !results.length) return false;
+    // match exact symbol case-insensitive
+    const found = results.find(r => (r.symbol || '').toLowerCase() === (symbol || '').toLowerCase());
+    return !!found;
+  } catch (err) {
     return false;
   }
 };

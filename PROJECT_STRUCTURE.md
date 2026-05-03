@@ -104,6 +104,15 @@ import { firebaseConfig } from './firebase-config';
 ### `/src`
 Contains all React Native UI code including components, screens, navigation, and context providers.
 
+### New files (uploaded/import flow)
+- `src/components/PortfolioFileUpload.js`: Expo DocumentPicker UI to select CSV/XLSX portfolio files.
+- `src/services/parsePortfolioFile.js`: Client-side parser for CSV/XLSX using PapaParse / SheetJS that normalizes rows to `{ ticker, shares, weight, avgCost, currentValue }`.
+- `src/services/reconcilePortfolio.js`: Reconciliation utility that validates tickers, queries Yahoo search for suggestions, and produces a review report `{ matched, needsReview, excluded }`.
+- `src/components/ReconciliationPanel.js`: Small UI to review suggestions, manually override or exclude tickers, and run analysis.
+- `src/hooks/useFileUploadPipeline.js`: Integration hook that sequences picker → parser → reconciler → enrichment (price lookup) and returns normalized holdings for analysis.
+
+These files implement the client-side upload data flow: picker → parser → reconciler → enrichment → analysis. Use `src/screens/FileUploadScreen.js` as an example glue screen that composes the pieces and navigates to `AnalyticsScreen` with analysis results.
+
 ### `/shared`
 Business logic, calculations, and utilities that could potentially be shared across frontend and backend (if backend is added).
 

@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useContext, useEffect, useState, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -20,6 +20,7 @@ import {
   TextInput,
   HelperText,
 } from 'react-native-paper';
+import DeletePortfolioDialog from '../components/DeletePortfolioDialog';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { PortfolioContext } from '../context/PortfolioContext';
 import { formatCurrency, formatPercent } from '../../shared/helpers';
@@ -54,7 +55,8 @@ const PortfoliosScreen = ({ navigation }) => {
   const [errors, setErrors] = useState({});
   const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
+  // dialog owns the typed input; parent does not need to track it
+  // kept state: deleteError to surface errors returned from delete operation
   const [deleteError, setDeleteError] = useState(null);
   const [portfolioHoldingsMap, setPortfolioHoldingsMap] = useState({});
 
@@ -156,9 +158,10 @@ const PortfoliosScreen = ({ navigation }) => {
     }
   };
 
-  const confirmDeletePortfolio = async () => {
+  const confirmDeletePortfolio = useCallback(async (inputValue) => {
+    const candidate = typeof inputValue === 'string' ? inputValue : '';
     if (!deleteTarget) return;
-    if (deleteConfirmInput.trim() !== deleteTarget.name) {
+    if (candidate.trim() !== deleteTarget.name) {
       setDeleteError('Portfolio name does not match');
       return;
     }
@@ -173,19 +176,17 @@ const PortfoliosScreen = ({ navigation }) => {
     } finally {
       setDeleteDialogVisible(false);
       setDeleteTarget(null);
-      setDeleteConfirmInput('');
       setDeleteError(null);
     }
-  };
+  }, [deleteTarget, deleteExistingPortfolio]);
 
-  const handleDeletePortfolio = (portfolio) => {
+  const handleDeletePortfolio = useCallback((portfolio) => {
     // Show a stronger confirmation dialog requiring the user to type the portfolio name
     setMenuVisible(null);
     setDeleteTarget(portfolio);
-    setDeleteConfirmInput('');
     setDeleteError(null);
     setDeleteDialogVisible(true);
-  };
+  }, []);
 
   const handleSelectPortfolio = (portfolio) => {
     selectPortfolio(portfolio);
@@ -315,6 +316,7 @@ const PortfoliosScreen = ({ navigation }) => {
         size={80}
         color={COLORS.surfaceVariant}
       />
+      
       <Text style={styles.emptyTitle}>No Portfolios</Text>
       <Text style={styles.emptyText}>
         Create your first portfolio to start tracking investments
@@ -331,41 +333,8 @@ const PortfoliosScreen = ({ navigation }) => {
     );
   }
 
-    // Delete confirmation dialog (type-to-confirm)
-    const DeleteDialog = () => (
-      <Portal>
-        <Dialog visible={deleteDialogVisible} onDismiss={() => setDeleteDialogVisible(false)}>
-          <Dialog.Title>Delete portfolio "{deleteTarget?.name}"?</Dialog.Title>
-          <Dialog.Content>
-            <Paragraph>
-              This will permanently delete this portfolio and its holdings. This action cannot be undone.
-            </Paragraph>
-            <Paragraph style={{ marginTop: 12 }}>
-              To confirm, type the portfolio name below:
-            </Paragraph>
-
-            <TextInput
-              value={deleteConfirmInput}
-              onChangeText={(t) => { setDeleteConfirmInput(t); setDeleteError(null); }}
-              label="Portfolio name"
-              style={{ marginTop: 12 }}
-            />
-            {deleteError && <HelperText type="error">{deleteError}</HelperText>}
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setDeleteDialogVisible(false)}>Cancel</Button>
-            <Button
-              mode="contained"
-              buttonColor="#E53935"
-              onPress={confirmDeletePortfolio}
-              disabled={deleteConfirmInput.trim() !== (deleteTarget?.name || '')}
-            >
-              Delete Portfolio
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
-    );
+    // Delete confirmation dialog (type-to-confirm) — render directly with stable callbacks
+    const handleDismissDelete = useCallback(() => setDeleteDialogVisible(false), []);
 
   return (
     <View style={styles.container}>
@@ -374,6 +343,17 @@ const PortfoliosScreen = ({ navigation }) => {
         <Text style={styles.headerSubtitle}>
           {portfolios.length} portfolio{portfolios.length !== 1 ? 's' : ''}
         </Text>
+        <Button
+          mode="outlined"
+          icon="file-import"
+          onPress={() => navigation.navigate('FileUpload')}
+          compact
+          style={styles.importButton}
+          labelStyle={{ color: COLORS.primary }}
+          color={COLORS.primary}
+        >
+          Import
+        </Button>
       </View>
 
       <FlatList
@@ -394,7 +374,13 @@ const PortfoliosScreen = ({ navigation }) => {
         onPress={handleCreatePortfolio}
       />
 
-      <DeleteDialog />
+      <DeletePortfolioDialog
+        visible={deleteDialogVisible}
+        onDismiss={handleDismissDelete}
+        target={deleteTarget}
+        onConfirm={confirmDeletePortfolio}
+        error={deleteError}
+      />
 
       <Portal>
         <Dialog visible={dialogVisible} onDismiss={() => setDialogVisible(false)}>
@@ -592,6 +578,13 @@ const styles = StyleSheet.create({
   },
   input: {
     marginBottom: 8,
+  },
+  importButton: {
+    alignSelf: 'flex-end',
+    borderColor: COLORS.primary,
+    borderWidth: 1,
+    backgroundColor: 'transparent',
+    paddingHorizontal: 12,
   },
 });
 

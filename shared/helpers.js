@@ -10,19 +10,21 @@ import { format, formatDistanceToNow, parseISO, isValid } from 'date-fns';
  * Format currency value
  */
 export const formatCurrency = (value, currency = 'USD', decimals = 2) => {
+  const v = Number.isFinite(Number(value)) ? Number(value) : 0;
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: currency,
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
-  }).format(value);
+  }).format(v);
 };
 
 /**
  * Format percentage
  */
 export const formatPercent = (value, decimals = 2) => {
-  return `${value >= 0 ? '+' : ''}${value.toFixed(decimals)}%`;
+  const v = Number.isFinite(Number(value)) ? Number(value) : 0;
+  return `${v >= 0 ? '+' : ''}${v.toFixed(decimals)}%`;
 };
 
 /**
@@ -126,8 +128,9 @@ export const isValidPassword = (password) => {
  * Validate stock symbol format
  */
 export const isValidSymbol = (symbol) => {
-  const symbolRegex = /^[A-Z]{1,5}$/;
-  return symbolRegex.test(symbol.toUpperCase());
+  if (!symbol || typeof symbol !== 'string') return false;
+  const symbolRegex = /^[A-Z0-9.\-\^]{1,6}$/i;
+  return symbolRegex.test(symbol.trim());
 };
 
 /**
@@ -327,10 +330,23 @@ export const logError = (context, error) => {
 export const copyToClipboard = async (text) => {
   try {
     // For web
-    if (navigator.clipboard) {
+    if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
       await navigator.clipboard.writeText(text);
       return true;
     }
+
+    // Try React Native community clipboard dynamically if available
+    try {
+      const mod = await import('@react-native-clipboard/clipboard');
+      const Clipboard = mod && mod.default ? mod.default : mod;
+      if (Clipboard && typeof Clipboard.setString === 'function') {
+        Clipboard.setString(String(text));
+        return true;
+      }
+    } catch (e) {
+      // module not available or failed to load; fall through
+    }
+
     return false;
   } catch (error) {
     logError('Clipboard', error);
@@ -344,7 +360,7 @@ export const copyToClipboard = async (text) => {
  * Generate random ID
  */
 export const generateId = () => {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 };
 
 /**

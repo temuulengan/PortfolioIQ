@@ -299,6 +299,78 @@ export const deleteHolding = async (holdingId) => {
   }
 };
 
+// ==================== TRANSACTIONS FUNCTIONS ====================
+
+/**
+ * Add a transaction (buy/sell/dividend) tied to a portfolio
+ */
+export const addTransaction = async (portfolioId, transactionData) => {
+  try {
+    const user = getCurrentUser();
+    if (!user) throw new Error('User not authenticated');
+
+    const tx = {
+      ...transactionData,
+      portfolioId,
+      userId: user.uid,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    };
+
+    const docRef = await addDoc(collection(db, 'transactions'), tx);
+    return { id: docRef.id, ...tx };
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Get all transactions for a portfolio (ordered by date desc)
+ */
+export const getPortfolioTransactions = async (portfolioId) => {
+  try {
+    const user = getCurrentUser();
+    if (!user) throw new Error('User not authenticated');
+
+    const q = query(
+      collection(db, 'transactions'),
+      where('portfolioId', '==', portfolioId),
+      where('userId', '==', user.uid),
+      orderBy('createdAt', 'desc')
+    );
+
+    const snapshot = await getDocs(q);
+    const txs = [];
+    snapshot.forEach(doc => txs.push({ id: doc.id, ...doc.data() }));
+    return txs;
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Update a transaction
+ */
+export const updateTransaction = async (transactionId, updates) => {
+  try {
+    const txRef = doc(db, 'transactions', transactionId);
+    await updateDoc(txRef, { ...updates, updatedAt: Timestamp.now() });
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Delete a transaction
+ */
+export const deleteTransaction = async (transactionId) => {
+  try {
+    await deleteDoc(doc(db, 'transactions', transactionId));
+  } catch (error) {
+    throw error;
+  }
+};
+
 // ==================== USER FUNCTIONS ====================
 
 /**

@@ -7,13 +7,7 @@ const toNumber = (v) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-const pickPurchasePrice = (holdingOrPrice, fallback) => {
-  // Accept either a holding object or a raw price
-  if (typeof holdingOrPrice === 'object' && holdingOrPrice !== null) {
-    return toNumber(holdingOrPrice.purchasePrice ?? holdingOrPrice.avgCost ?? fallback ?? 0);
-  }
-  return toNumber(holdingOrPrice ?? fallback ?? 0);
-};
+// NOTE: `pickPurchasePrice` was removed (was unused) to avoid dead code.
 
 // ==================== BASIC CALCULATIONS ====================
 
@@ -89,10 +83,18 @@ export const calculatePortfolioGainLossPercent = (holdings) => {
 export const calculatePortfolioDayChange = (holdings) => {
   if (!Array.isArray(holdings) || holdings.length === 0) return 0;
   return holdings.reduce((total, h) => {
-    const prevClose = Number.isFinite(h.currentPrice)
-      ? (h.currentPrice / (1 + (h.dayChangePercent || 0) / 100))
-      : (h.previousClose ?? h.purchasePrice ?? h.avgCost ?? 0);
+    // Prefer explicit `previousClose` if present. If not present but `dayChangePercent` and currentPrice
+    // are available, reconstruct previous close. Otherwise skip day-change for this holding (avoid
+    // inventing a previous close which yields misleading zero values).
+    let prevClose = null;
+    if (Number.isFinite(h.previousClose)) {
+      prevClose = h.previousClose;
+    } else if (Number.isFinite(h.currentPrice) && Number.isFinite(h.dayChangePercent)) {
+      const d = Number(h.dayChangePercent);
+      if (!Number.isNaN(d)) prevClose = h.currentPrice / (1 + d / 100);
+    }
     const current = Number.isFinite(h.currentPrice) ? h.currentPrice : (h.purchasePrice ?? h.avgCost ?? 0);
+    if (prevClose == null) return total; // can't compute day change reliably without prevClose
     return total + calculateDayChange(h.quantity, prevClose, current);
   }, 0);
 };
@@ -166,21 +168,63 @@ export const getBottomPerformers = (holdings, count = 5) => {
 
 export const calculateVolatility = (holdings) => {
   if (!Array.isArray(holdings) || holdings.length === 0) return 0;
-  const returns = holdings.map(h => calculateGainLossPercent(h.purchasePrice ?? h.avgCost ?? 0, h.currentPrice));
-  const mean = returns.reduce((s, v) => s + v, 0) / returns.length;
-  const variance = returns.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / returns.length;
-  return Math.sqrt(variance);
+
+  // If holdings include per-asset return series (`returns` arrays of equal length), compute
+  // portfolio daily returns as the allocation-weighted sum and annualize the std dev.
+  const allocations = calculateAllocation(holdings);
+  const returnsMatrix = holdings.map(h => Array.isArray(h.returns) ? h.returns : null);
+  if (returnsMatrix.every(r => Array.isArray(r))) {
+    const len = returnsMatrix[0].length;
+    if (len < 2) return 0;
+    const portfolioReturns = [];
+    for (let t = 0; t < len; t++) {
+      let r = 0;
+      for (let i = 0; i < holdings.length; i++) {
+        const w = (allocations[i]?.allocationPercent || 0) / 100;
+        r += (returnsMatrix[i][t] || 0) * w;
+      }
+      portfolioReturns.push(r);
+    }
+    const m = portfolioReturns.reduce((s, v) => s + v, 0) / portfolioReturns.length;
+    const variance = portfolioReturns.reduce((s, v) => s + Math.pow(v - m, 2), 0) / (portfolioReturns.length - 1);
+    const dailyVol = Math.sqrt(Math.max(0, variance));
+    return dailyVol * Math.sqrt(252) * 100; // return as percent annualized
+  }
+
+  // Fallback: if assets contain `annualVolatility` (in percent), compute a simple
+  // portfolio volatility approximation by summing squared weighted vols (diagonal approximation).
+  const vols = holdings.map(h => (Number.isFinite(h.annualVolatility) ? h.annualVolatility : null));
+  if (vols.some(v => v != null)) {
+    const weights = allocations.map(a => (a.allocationPercent || 0) / 100);
+    let variance = 0;
+    for (let i = 0; i < vols.length; i++) {
+      if (vols[i] == null) continue;
+      variance += (weights[i] ** 2) * Math.pow(vols[i] / 100, 2);
+    }
+    const vol = Math.sqrt(Math.max(0, variance)) * 100;
+    return Number.isFinite(vol) ? vol : 0;
+  }
+
+  // No time-series or vol info available — avoid returning a misleading cross-sectional "volatility".
+  return 0;
 };
 
 export const calculatePortfolioBeta = (holdings) => {
   const totalValue = calculatePortfolioValue(holdings);
   if (!Number.isFinite(totalValue) || totalValue === 0) return 0;
-  return (holdings || []).reduce((weightedBeta, h) => {
+  // Compute weighted beta only across holdings that actually have a numeric `beta` value.
+  let weighted = 0;
+  let weightSum = 0;
+  (holdings || []).forEach((h) => {
     const purchase = h.purchasePrice ?? h.avgCost ?? 0;
     const weight = calculateHoldingValue(h.quantity, h.currentPrice, purchase, h.id) / totalValue;
-    const beta = h.beta ?? 1.0;
-    return weightedBeta + (weight * beta);
-  }, 0);
+    if (Number.isFinite(h.beta)) {
+      weighted += weight * Number(h.beta);
+      weightSum += weight;
+    }
+  });
+  if (weightSum === 0) return 0; // no beta data available
+  return weighted / weightSum;
 };
 
 export const calculateSharpeRatio = (portfolioReturn, riskFreeRate, volatility) => {
@@ -200,7 +244,8 @@ export const calculateDiversificationScore = (holdings) => {
   const allocations = calculateAllocation(holdings);
   const maxAllocation = Math.max(...allocations.map(h => h.allocationPercent || 0));
   const countScore = Math.min(50, holdings.length * 5);
-  const distributionScore = Math.max(0, 50 - maxAllocation);
+  // Make distribution score scale 0-50 by converting maxAllocation (0-100) into a 0-50 range.
+  const distributionScore = Math.max(0, (100 - maxAllocation) * 0.5);
   return Math.min(100, countScore + distributionScore);
 };
 

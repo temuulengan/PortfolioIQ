@@ -13,6 +13,13 @@ const normalizeWeights = (weights) => {
   return weights.map(w => w / sum);
 };
 
+const safePrice = (h) => {
+  if (!h) return 0;
+  if (Number.isFinite(h.currentPrice) && h.currentPrice > 0) return Number(h.currentPrice);
+  if (Number.isFinite(h.avgCost) && h.avgCost > 0) return Number(h.avgCost);
+  return 0;
+};
+
 const toDatePriceMap = (history) => {
   const map = new Map();
   for (let i = 0; i < history.dates.length; i += 1) {
@@ -141,10 +148,9 @@ const riskContributionBreakdown = (weights, covarianceMatrix) => {
   };
 };
 
-const solveRiskParityWeights = (covarianceMatrix, iterations = 250) => {
+const solveRiskParityWeights = (covarianceMatrix, iterations = 250, tol = 1e-8) => {
   const n = covarianceMatrix.length;
   let weights = Array(n).fill(1 / n);
-
   for (let step = 0; step < iterations; step += 1) {
     const breakdown = riskContributionBreakdown(weights, covarianceMatrix);
     const target = 1 / n;
@@ -152,10 +158,14 @@ const solveRiskParityWeights = (covarianceMatrix, iterations = 250) => {
     const updated = weights.map((w, i) => {
       const diff = breakdown.riskContributionPct[i] - target;
       const next = w * (1 - (0.5 * diff));
-      return clamp(next, 0.0001, 1);
+      return clamp(next, 0.0000001, 1);
     });
 
-    weights = normalizeWeights(updated);
+    const normalized = normalizeWeights(updated);
+    // check convergence (max absolute change)
+    const maxDiff = Math.max(...normalized.map((v, i) => Math.abs(v - weights[i])));
+    weights = normalized;
+    if (maxDiff < tol) break;
   }
 
   return weights;
@@ -231,14 +241,17 @@ export const runBridgewaterAnalysis = async (holdings, options = {}) => {
 
   const covarianceMatrix = buildCovarianceMatrix(returnsMatrix);
 
+  // Guard currentPrice when computing total portfolio value/weights
   const totalValue = successful.reduce(
-    (acc, item) => acc + (item.holding.quantity * item.holding.currentPrice),
+    (acc, item) => acc + (item.holding.quantity * safePrice(item.holding)),
     0
   );
 
-  const currentWeights = normalizeWeights(
-    successful.map(item => (item.holding.quantity * item.holding.currentPrice) / totalValue)
-  );
+  // The per-asset current weights (sum to ~1). We avoid double-normalizing.
+  const currentWeights = successful.map(item => {
+    const v = safePrice(item.holding) * (item.holding.quantity || 0);
+    return totalValue > 0 ? v / totalValue : 0;
+  });
 
   const targetWeights = solveRiskParityWeights(covarianceMatrix);
 
@@ -281,8 +294,6 @@ export const runBridgewaterAnalysis = async (holdings, options = {}) => {
     success: true,
     method: 'Bridgewater-inspired risk parity (local deterministic engine)',
     lookbackDays: commonDates.length,
-    covarianceMatrix,
-    returnsMatrix,
     annualizedVolatilityCurrent: currentBreakdown.sigmaAnnualized,
     annualizedVolatilityTarget: targetBreakdown.sigmaAnnualized,
     riskImbalanceCurrent: currentRiskImbalance,
@@ -296,6 +307,4 @@ export const runBridgewaterAnalysis = async (holdings, options = {}) => {
   };
 };
 
-export default {
-  runBridgewaterAnalysis,
-};
+export default runBridgewaterAnalysis;

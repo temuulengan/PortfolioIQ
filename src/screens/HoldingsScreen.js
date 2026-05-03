@@ -21,6 +21,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
 import { PortfolioContext } from '../context/PortfolioContext';
 import HoldingCard from '../components/HoldingCard';
+import TransactionsScreen from './TransactionsScreen';
 import { sortBy, formatCurrency } from '../../shared/helpers';
 import { calculatePortfolioValue } from '../../shared/calculations';
 import { COLORS, Spacing, Shadow } from '../../shared/colors';
@@ -170,9 +171,10 @@ const HoldingsScreen = ({ navigation }) => {
 
       <View style={styles.controlsContainer}>
         <View style={styles.statsContainer}>
-          <Chip icon="briefcase" style={styles.chip}>
-            {holdings.length} Holdings
-          </Chip>
+          <View style={[styles.chip, styles.briefcaseChip]}>
+            <MaterialCommunityIcons name="briefcase" size={16} color={COLORS.primary} />
+            <Text style={styles.briefcaseText}>{holdings.length} Holdings</Text>
+          </View>
         </View>
 
         <Menu
@@ -289,11 +291,7 @@ const HoldingsScreen = ({ navigation }) => {
       ) : (
         <View style={styles.transactionsEmptyWrap}>
           {renderHeader()}
-          <View style={styles.emptyContainer}>
-            <MaterialCommunityIcons name="swap-horizontal-circle-outline" size={72} color={COLORS.surfaceVariant} />
-            <Text style={styles.emptyTitle}>No Transactions Yet</Text>
-            <Text style={styles.emptyText}>Transaction history UI is reserved for the next release.</Text>
-          </View>
+          <TransactionsScreen portfolio={selectedPortfolio} />
         </View>
       )}
 
@@ -421,6 +419,19 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderColor: COLORS.border,
     borderWidth: 1,
+  },
+  briefcaseChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  briefcaseText: {
+    marginLeft: 8,
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.primary,
   },
   sortButton: {
     flexDirection: 'row',

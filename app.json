@@ -43,7 +43,8 @@
           "project": "react-native",
           "organization": "temuulenn"
         }
-      ]
+      ],
+      "@sentry/react-native"
     ]
   }
 }

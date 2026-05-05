@@ -9,14 +9,34 @@ import { NotificationProvider } from './src/context/NotificationContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import { theme } from './shared/theme';
 import * as SplashScreen from 'expo-splash-screen';
-import { View } from 'react-native';
+import { View, Button } from 'react-native';
+import * as Sentry from '@sentry/react-native';
+
+Sentry.init({
+  dsn: 'https://9fadffa64676689e87fc72396d366a71@o4511337338896384.ingest.us.sentry.io/4511337341190144',
+
+  // Adds more context data to events (IP address, cookies, user, etc.)
+  // For more information, visit: https://docs.sentry.io/platforms/react-native/data-management/data-collected/
+  sendDefaultPii: true,
+
+  // Enable Logs
+  enableLogs: true,
+
+  // Configure Session Replay
+  replaysSessionSampleRate: 0.1,
+  replaysOnErrorSampleRate: 1,
+  integrations: [Sentry.mobileReplayIntegration(), Sentry.feedbackIntegration()],
+
+  // uncomment the line below to enable Spotlight (https://spotlightjs.com)
+  // spotlight: __DEV__,
+});
 
 // Ignore VirtualizedList warning
 LogBox.ignoreLogs(['VirtualizedLists should never be nested']);
 
 const MIN_SPLASH_MS = 800; // minimum time to keep the native splash visible
 
-export default function App() {
+export default Sentry.wrap(function App() {
   const [appIsReady, setAppIsReady] = useState(false);
 
   useEffect(() => {
@@ -78,6 +98,18 @@ export default function App() {
             <NotificationProvider>
               <StatusBar style="auto" />
               <AppNavigator />
+              {__DEV__ && (
+                <View style={{ position: 'absolute', right: 16, bottom: 120 }}>
+                  <Button
+                    title="Sentry Test"
+                    onPress={() => {
+                      Sentry.captureException(new Error('Manual test error from dev'));
+                      Sentry.captureMessage('Manual test message from dev');
+                      console.log('Sentry test event sent');
+                    }}
+                  />
+                </View>
+              )}
             </NotificationProvider>
           </PortfolioProvider>
         </AuthProvider>
@@ -85,4 +117,4 @@ export default function App() {
       </View>
     </SafeAreaProvider>
   );
-}
+});

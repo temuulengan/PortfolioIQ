@@ -4,12 +4,12 @@
     "slug": "portfolio-iq",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/app-icon/ios/AppIcon~ios-marketing.png",
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#1a1a2e"
+      "backgroundColor": "#123C38"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -20,7 +20,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/app-icon/ios/AppIcon@2x.png",
         "backgroundColor": "#1a1a2e"
       },
       "package": "com.portfolioiq.app",
@@ -33,6 +33,17 @@
       "eas": {
         "projectId": "63db2884-de22-4f53-855d-09dd80ec130a"
       }
-    }
+    },
+    "plugins": [
+      "expo-font",
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "project": "react-native",
+          "organization": "temuulenn"
+        }
+      ]
+    ]
   }
 }

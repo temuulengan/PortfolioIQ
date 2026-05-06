@@ -203,8 +203,11 @@ const RiskScreen = () => {
               <Title style={styles.cardTitle}>Portfolio Beta</Title>
             </View>
             <Chip
-              style={[styles.riskChip, { backgroundColor: betaRisk.color + '20' }]}
-              textStyle={{ color: betaRisk.color, fontWeight: '600' }}
+              style={[
+                styles.riskChip,
+                { backgroundColor: (betaRisk?.color ?? COLORS.primary) + '20' },
+              ]}
+              textStyle={{ color: betaRisk?.color ?? COLORS.primary, fontWeight: '600' }}
             >
               {betaRisk.level} Risk
             </Chip>
@@ -238,8 +241,11 @@ const RiskScreen = () => {
               <Title style={styles.cardTitle}>Volatility</Title>
             </View>
             <Chip
-              style={[styles.riskChip, { backgroundColor: volatilityRisk.color + '20' }]}
-              textStyle={{ color: volatilityRisk.color, fontWeight: '600' }}
+              style={[
+                styles.riskChip,
+                { backgroundColor: (volatilityRisk?.color ?? COLORS.primary) + '20' },
+              ]}
+              textStyle={{ color: volatilityRisk?.color ?? COLORS.primary, fontWeight: '600' }}
             >
               {volatilityRisk.level} Risk
             </Chip>
@@ -269,9 +275,9 @@ const RiskScreen = () => {
             <Chip
               style={[
                 styles.riskChip,
-                { backgroundColor: concentrationRiskLevel.color + '20' },
+                { backgroundColor: (concentrationRiskLevel?.color ?? COLORS.primary) + '20' },
               ]}
-              textStyle={{ color: concentrationRiskLevel.color, fontWeight: '600' }}
+              textStyle={{ color: concentrationRiskLevel?.color ?? COLORS.primary, fontWeight: '600' }}
             >
               {concentrationRiskLevel.level} Risk
             </Chip>
@@ -305,8 +311,11 @@ const RiskScreen = () => {
               <Title style={styles.cardTitle}>Diversification Score</Title>
             </View>
             <Chip
-              style={[styles.riskChip, { backgroundColor: diversificationColor + '20' }]}
-              textStyle={{ color: diversificationColor, fontWeight: '600' }}
+              style={[
+                styles.riskChip,
+                { backgroundColor: (diversificationColor ?? COLORS.primary) + '20' },
+              ]}
+              textStyle={{ color: diversificationColor ?? COLORS.primary, fontWeight: '600' }}
             >
               {diversificationScore >= 60 ? 'Good' : 'Needs Work'}
             </Chip>

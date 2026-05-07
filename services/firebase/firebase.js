@@ -13,6 +13,7 @@ import {
 import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 import {
   getFirestore,
+  initializeFirestore,
   collection,
   doc,
   addDoc,
@@ -50,7 +51,15 @@ try {
   }
 }
 
-const db = getFirestore(app);
+// Use initializeFirestore with forceLongPolling to avoid WebChannel/WebSocket transport
+// errors in environments where native sockets or streams are restricted (emulators, proxies).
+let db;
+try {
+  db = initializeFirestore(app, { experimentalForceLongPolling: true, useFetchStreams: false });
+} catch (e) {
+  // Fallback to getFirestore if initializeFirestore is not available or fails
+  db = getFirestore(app);
+}
 
 // ==================== AUTH FUNCTIONS ====================
 

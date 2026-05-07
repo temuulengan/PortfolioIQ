@@ -1,11 +1,13 @@
 import React, { createContext, useState, useEffect } from 'react';
-import { 
-  loginUser, 
-  registerUser, 
-  signOut, 
+import {
+  loginUser,
+  registerUser,
+  signOut,
   getCurrentUser,
-  resetPassword as resetUserPassword 
+  resetPassword as resetUserPassword,
+  onAuthChange,
 } from '../../services/firebase/firebase';
+import { getAuth, signInAnonymously } from 'firebase/auth';
 
 export const AuthContext = createContext();
 
@@ -14,19 +16,25 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check if user is already logged in
-    const checkUser = async () => {
-      try {
-        const currentUser = await getCurrentUser();
-        setUser(currentUser);
-      } catch (error) {
-        console.error('Error checking user:', error);
-      } finally {
-        setLoading(false);
+    // Subscribe to auth state changes so we don't attempt Firestore reads
+    // before a user is available.
+    const unsub = onAuthChange((currentUser) => {
+      setUser(currentUser);
+      setLoading(false);
+      // In development only: if no user is signed in, automatically sign in anonymously
+      // to allow debugging flows that require auth (don't do this in production)
+      if (__DEV__ && !currentUser) {
+        try {
+          const auth = getAuth();
+          signInAnonymously(auth).catch(() => {});
+        } catch (e) {
+          // ignore
+        }
       }
+    });
+    return () => {
+      if (typeof unsub === 'function') unsub();
     };
-
-    checkUser();
   }, []);
 
   const login = async (email, password) => {

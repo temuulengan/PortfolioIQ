@@ -55,12 +55,10 @@ export const registerUser = async (email, password, displayName) => {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
-    // Update profile with display name
     if (displayName) {
       await updateProfile(user, { displayName });
     }
 
-    // Create user document in Firestore
     await setDoc(doc(db, 'users', user.uid), {
       email: user.email,
       displayName: displayName || '',
@@ -108,7 +106,7 @@ export const resetPassword = async (email) => {
 };
 
 /**
- * Get current user
+ * Get current user (synchronous — may be null during auth restore)
  */
 export const getCurrentUser = () => {
   return auth.currentUser;
@@ -128,7 +126,6 @@ export const updateAuthProfile = async (updates) => {
   try {
     const user = getCurrentUser();
     if (!user) throw new Error('User not authenticated');
-    // updateProfile is imported from firebase/auth at top of this file
     await updateProfile(user, updates);
     return true;
   } catch (error) {
@@ -140,15 +137,15 @@ export const updateAuthProfile = async (updates) => {
 
 /**
  * Create a new portfolio
+ * uid is passed from context to avoid auth race condition
  */
-export const createPortfolio = async (portfolioData) => {
+export const createPortfolio = async (portfolioData, uid) => {
   try {
-    const user = getCurrentUser();
-    if (!user) throw new Error('User not authenticated');
+    if (!uid) throw new Error('User not authenticated');
 
     const portfolio = {
       ...portfolioData,
-      userId: user.uid,
+      userId: uid,
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
     };
@@ -162,15 +159,15 @@ export const createPortfolio = async (portfolioData) => {
 
 /**
  * Get all portfolios for current user
+ * uid is passed from context to avoid auth race condition
  */
-export const getUserPortfolios = async () => {
+export const getUserPortfolios = async (uid) => {
   try {
-    const user = getCurrentUser();
-    if (!user) throw new Error('User not authenticated');
+    if (!uid) throw new Error('User not authenticated');
 
     const q = query(
       collection(db, 'portfolios'),
-      where('userId', '==', user.uid),
+      where('userId', '==', uid),
       orderBy('createdAt', 'desc')
     );
 
@@ -202,11 +199,10 @@ export const updatePortfolio = async (portfolioId, updates) => {
 };
 
 /**
- * Delete portfolio
+ * Delete portfolio and all its holdings
  */
 export const deletePortfolio = async (portfolioId) => {
   try {
-    // Delete all holdings in this portfolio first
     const holdingsQuery = query(
       collection(db, 'holdings'),
       where('portfolioId', '==', portfolioId)
@@ -215,7 +211,6 @@ export const deletePortfolio = async (portfolioId) => {
     const deletePromises = holdingsSnapshot.docs.map((doc) => deleteDoc(doc.ref));
     await Promise.all(deletePromises);
 
-    // Then delete the portfolio
     await deleteDoc(doc(db, 'portfolios', portfolioId));
   } catch (error) {
     throw error;
@@ -226,16 +221,16 @@ export const deletePortfolio = async (portfolioId) => {
 
 /**
  * Add a new holding
+ * uid is passed from context to avoid auth race condition
  */
-export const addHolding = async (portfolioId, holdingData) => {
+export const addHolding = async (portfolioId, holdingData, uid) => {
   try {
-    const user = getCurrentUser();
-    if (!user) throw new Error('User not authenticated');
+    if (!uid) throw new Error('User not authenticated');
 
     const holding = {
       ...holdingData,
       portfolioId: portfolioId,
-      userId: user.uid,
+      userId: uid,
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
     };
@@ -249,16 +244,16 @@ export const addHolding = async (portfolioId, holdingData) => {
 
 /**
  * Get all holdings for a portfolio
+ * uid is passed from context to avoid auth race condition
  */
-export const getPortfolioHoldings = async (portfolioId) => {
+export const getPortfolioHoldings = async (portfolioId, uid) => {
   try {
-    const user = getCurrentUser();
-    if (!user) throw new Error('User not authenticated');
+    if (!uid) throw new Error('User not authenticated');
 
     const q = query(
       collection(db, 'holdings'),
       where('portfolioId', '==', portfolioId),
-      where('userId', '==', user.uid)
+      where('userId', '==', uid)
     );
 
     const querySnapshot = await getDocs(q);
@@ -303,16 +298,16 @@ export const deleteHolding = async (holdingId) => {
 
 /**
  * Add a transaction (buy/sell/dividend) tied to a portfolio
+ * uid is passed from context to avoid auth race condition
  */
-export const addTransaction = async (portfolioId, transactionData) => {
+export const addTransaction = async (portfolioId, transactionData, uid) => {
   try {
-    const user = getCurrentUser();
-    if (!user) throw new Error('User not authenticated');
+    if (!uid) throw new Error('User not authenticated');
 
     const tx = {
       ...transactionData,
       portfolioId,
-      userId: user.uid,
+      userId: uid,
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
     };
@@ -326,16 +321,16 @@ export const addTransaction = async (portfolioId, transactionData) => {
 
 /**
  * Get all transactions for a portfolio (ordered by date desc)
+ * uid is passed from context to avoid auth race condition
  */
-export const getPortfolioTransactions = async (portfolioId) => {
+export const getPortfolioTransactions = async (portfolioId, uid) => {
   try {
-    const user = getCurrentUser();
-    if (!user) throw new Error('User not authenticated');
+    if (!uid) throw new Error('User not authenticated');
 
     const q = query(
       collection(db, 'transactions'),
       where('portfolioId', '==', portfolioId),
-      where('userId', '==', user.uid),
+      where('userId', '==', uid),
       orderBy('createdAt', 'desc')
     );
 
@@ -394,16 +389,16 @@ export const getUserProfile = async (userId) => {
 export const updateUserProfile = async (userId, updates) => {
   try {
     const userRef = doc(db, 'users', userId);
-    // Use setDoc with merge to create the document if it doesn't exist
-    // and to avoid 'No document to update' errors when preferences are saved before user doc creation.
     await setDoc(userRef, updates, { merge: true });
   } catch (error) {
     throw error;
   }
 };
 
-// IMPORTANT: This must also call FirebaseAuth.currentUser.delete() which requires recent re-authentication
-// (reauthenticateWithCredential). Implement before shipping.
+/**
+ * Delete user account
+ * IMPORTANT: requires recent re-authentication before calling FirebaseAuth.currentUser.delete()
+ */
 export const deleteUserAccount = async (userId) => {
   // TODO: implement full account deletion (Firestore documents + Auth user delete with reauth)
   console.warn('deleteUserAccount called for', userId);

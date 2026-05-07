@@ -43,7 +43,6 @@ export const PortfolioProvider = ({ children }) => {
     if (selectedPortfolio) {
       loadHoldings(selectedPortfolio.id);
     } else {
-      // no portfolio selected — ensure holdings empty and loading false
       setHoldings([]);
       setIsLoadingHoldings(false);
     }
@@ -51,11 +50,12 @@ export const PortfolioProvider = ({ children }) => {
 
   const loadPortfolios = async () => {
     try {
+      if (!user) return;
       setLoading(true);
+      // Pass user.uid directly to avoid auth race condition
       const portfolioList = await getUserPortfolios(user.uid);
       setPortfolios(portfolioList);
-      
-      // Auto-select first portfolio if none selected
+
       if (portfolioList.length > 0 && !selectedPortfolio) {
         setSelectedPortfolio(portfolioList[0]);
       }
@@ -67,16 +67,14 @@ export const PortfolioProvider = ({ children }) => {
   };
 
   const loadHoldings = async (portfolioId) => {
-    // Guarded, cancelable fetch using fetchIdRef to avoid races
     const localFetchId = ++fetchIdRef.current;
     try {
-      // Mark holdings loading state and clear stale holdings synchronously
+      if (!user) return;
       setIsLoadingHoldings(true);
       setHoldings([]);
 
-      // One-time fetch of holdings
-      const holdingsList = await getPortfolioHoldings(portfolioId);
-      // Filter out archived holdings so they don't show in the UI
+      // Pass user.uid directly to avoid auth race condition
+      const holdingsList = await getPortfolioHoldings(portfolioId, user.uid);
       let visibleHoldings = Array.isArray(holdingsList) ? holdingsList.filter(h => !h.archived) : [];
 
       // Safety filter: ensure all holdings belong to this portfolioId
@@ -86,14 +84,12 @@ export const PortfolioProvider = ({ children }) => {
         visibleHoldings = visibleHoldings.filter(h => h.portfolioId === portfolioId);
       }
 
-      // Attempt to refresh current prices before updating state to avoid double-render flicker
       if (visibleHoldings && visibleHoldings.length > 0) {
         try {
           const symbols = visibleHoldings.map(h => h.symbol).filter(Boolean);
           if (symbols.length > 0) {
             const pricesData = await getMultipleStockPrices(symbols);
 
-            // Compute updated holdings quickly (do not await Firestore writes)
             const now = new Date().toISOString();
             const updatedHoldings = visibleHoldings.map((holding) => {
               const priceObj = pricesData.find(p => p.symbol === holding.symbol);
@@ -103,12 +99,11 @@ export const PortfolioProvider = ({ children }) => {
               return holding;
             });
 
-            // Commit to UI immediately if still current
             if (localFetchId === fetchIdRef.current) {
               setHoldings(updatedHoldings.filter(h => h.portfolioId === portfolioId));
               setIsLoadingHoldings(false);
 
-              // Persist price updates in background without blocking the UI/fetch lifecycle
+              // Persist price updates in background
               (async () => {
                 try {
                   await Promise.all(updatedHoldings.map(async (holding) => {
@@ -126,7 +121,6 @@ export const PortfolioProvider = ({ children }) => {
                 }
               })();
             } else {
-              // stale result
               console.warn('Stale holdings fetch result discarded for', portfolioId);
             }
           } else {
@@ -138,7 +132,6 @@ export const PortfolioProvider = ({ children }) => {
         } catch (err) {
           console.error('Error refreshing prices after loading holdings:', err);
           if (localFetchId === fetchIdRef.current) {
-            // Fall back to visible holdings if price refresh fails
             setHoldings(visibleHoldings);
             setIsLoadingHoldings(false);
           }
@@ -160,10 +153,10 @@ export const PortfolioProvider = ({ children }) => {
 
   const createNewPortfolio = async (portfolioData) => {
     try {
-      // createPortfolio service reads current user internally; pass only portfolio data
-      const newPortfolio = await createPortfolio(portfolioData);
+      if (!user) throw new Error('User not authenticated');
+      // Pass user.uid directly to avoid auth race condition
+      const newPortfolio = await createPortfolio(portfolioData, user.uid);
       setPortfolios([...portfolios, newPortfolio]);
-      // clear holdings and prepare for new selection
       fetchIdRef.current += 1;
       setHoldings([]);
       setIsLoadingHoldings(true);
@@ -209,35 +202,32 @@ export const PortfolioProvider = ({ children }) => {
 
   const addNewHolding = async (holdingData) => {
     try {
-      if (!selectedPortfolio) {
-        throw new Error('No portfolio selected');
-      }
+      if (!selectedPortfolio) throw new Error('No portfolio selected');
+      if (!user) throw new Error('User not authenticated');
 
-      // Get current stock price
       const priceData = await getStockPrice(holdingData.symbol);
       const currentPrice = priceData.price;
 
+      // Pass user.uid directly to avoid auth race condition
       const newHolding = await addHolding(selectedPortfolio.id, {
         ...holdingData,
         currentPrice,
         lastUpdated: new Date().toISOString(),
-      });
+      }, user.uid);
 
-      // Safety: ensure portfolioId matches before adding to in-memory holdings
       if (newHolding.portfolioId && selectedPortfolio && newHolding.portfolioId !== selectedPortfolio.id) {
         console.error('Attempted to add holding for mismatched portfolioId:', newHolding.id);
       } else {
         setHoldings(prev => [...prev, newHolding]);
       }
-      
-      // Create notification for new holding
+
       await createNotification({
         type: NOTIFICATION_TYPES.HOLDING_ADDED,
         title: 'New Holding Added',
         message: `${holdingData.symbol}: ${holdingData.quantity} shares at $${currentPrice.toFixed(2)}`,
         data: { holdingId: newHolding.id, symbol: holdingData.symbol },
       });
-      
+
       return { success: true, holding: newHolding };
     } catch (error) {
       return { success: false, error: error.message };
@@ -250,8 +240,9 @@ export const PortfolioProvider = ({ children }) => {
       const updatedHoldings = holdings.map(h =>
         h.id === holdingId ? { ...h, ...updates } : h
       );
-      // Filter by selected portfolio to be safe
-      const filtered = (selectedPortfolio && selectedPortfolio.id) ? updatedHoldings.filter(h => h.portfolioId === selectedPortfolio.id) : updatedHoldings;
+      const filtered = (selectedPortfolio && selectedPortfolio.id)
+        ? updatedHoldings.filter(h => h.portfolioId === selectedPortfolio.id)
+        : updatedHoldings;
       setHoldings(filtered);
       return { success: true };
     } catch (error) {
@@ -263,7 +254,9 @@ export const PortfolioProvider = ({ children }) => {
     try {
       await deleteHolding(holdingId);
       const updatedHoldings = holdings.filter(h => h.id !== holdingId);
-      const filtered = (selectedPortfolio && selectedPortfolio.id) ? updatedHoldings.filter(h => h.portfolioId === selectedPortfolio.id) : updatedHoldings;
+      const filtered = (selectedPortfolio && selectedPortfolio.id)
+        ? updatedHoldings.filter(h => h.portfolioId === selectedPortfolio.id)
+        : updatedHoldings;
       setHoldings(filtered);
       return { success: true };
     } catch (error) {
@@ -273,7 +266,6 @@ export const PortfolioProvider = ({ children }) => {
 
   const refreshPrices = async () => {
     try {
-      // Background price refresh — do not touch isLoadingHoldings
       setIsRefreshingPrices(true);
       setRefreshing(true);
 
@@ -299,14 +291,11 @@ export const PortfolioProvider = ({ children }) => {
       });
 
       const updatedHoldings = await Promise.all(updatePromises);
-      // Only commit if the current fetchId hasn't changed and filter by portfolio
       setHoldings(prev => {
         const pid = selectedPortfolio?.id;
-        const filtered = pid ? updatedHoldings.filter(h => h.portfolioId === pid) : updatedHoldings;
-        return filtered;
+        return pid ? updatedHoldings.filter(h => h.portfolioId === pid) : updatedHoldings;
       });
 
-      // Check for price alerts after updating
       await checkPriceAlerts(updatedHoldings);
 
       setIsRefreshingPrices(false);
@@ -317,15 +306,11 @@ export const PortfolioProvider = ({ children }) => {
       setIsRefreshingPrices(false);
       setRefreshing(false);
       return { success: false, error: error.message };
-    } finally {
-      // already cleared above
     }
   };
 
   const selectPortfolio = (portfolio) => {
-    // Increment fetch id and clear holdings synchronously to avoid stale-frame flicker
     fetchIdRef.current += 1;
-    // If there was a real-time listener, unsubscribe it first (safety)
     if (holdingsUnsubscribeRef.current && typeof holdingsUnsubscribeRef.current === 'function') {
       try { holdingsUnsubscribeRef.current(); } catch (e) { /* ignore */ }
       holdingsUnsubscribeRef.current = null;
@@ -346,7 +331,7 @@ export const PortfolioProvider = ({ children }) => {
         refreshing,
         isRefreshingPrices,
         loadPortfolios,
-          loadHoldings,
+        loadHoldings,
         createNewPortfolio,
         updateExistingPortfolio,
         deleteExistingPortfolio,

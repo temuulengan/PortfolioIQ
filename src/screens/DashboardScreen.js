@@ -274,6 +274,15 @@ const DashboardScreen = ({ navigation }) => {
                 <Text style={styles.actionText}>Portfolios</Text>
               </TouchableOpacity>
             </View>
+            {__DEV__ && (
+              <FAB
+                small
+                icon="bug"
+                label="Debug Holdings"
+                onPress={() => navigation.navigate('DebugDumpHoldings')}
+                style={{ position: 'absolute', right: 16, bottom: 80, zIndex: 999 }}
+              />
+            )}
           </>
         ) : (
           <View style={styles.emptyContainer}>

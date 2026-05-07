@@ -17,6 +17,7 @@ import AnalyticsScreen from '../screens/AnalyticsScreen';
 import RiskScreen from '../screens/RiskScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import FileUploadScreen from '../screens/FileUploadScreen';
+import DebugDumpHoldingsScreen from '../screens/DebugDumpHoldingsScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -100,6 +101,13 @@ const AppNavigator = () => {
               component={FileUploadScreen}
               options={{ headerShown: true, title: 'Import Portfolio' }}
             />
+            {__DEV__ && (
+              <Stack.Screen
+                name="DebugDumpHoldings"
+                component={DebugDumpHoldingsScreen}
+                options={{ headerShown: true, title: 'Debug: Dump Holdings' }}
+              />
+            )}
           </>
         )}
       </Stack.Navigator>

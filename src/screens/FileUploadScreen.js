@@ -90,15 +90,15 @@ const FileUploadScreen = () => {
         } catch (e) {
           // ignore load errors
         }
-        // Ensure holdings are loaded from Firestore for the created portfolio before selecting
+        // Select the new portfolio first (increments fetch id and clears stale state),
+        // then explicitly load holdings once to avoid concurrent/duplicate loads that
+        // can cause the 'stale fetch result discarded' behavior.
+        selectPortfolio(createdPortfolio);
         try {
           await loadHoldings(createdPortfolio.id);
         } catch (e) {
-          // if loadHoldings fails, fall back to selecting anyway
+          // if loadHoldings fails, continue — UI will handle loading state
         }
-        // wait for holdings to be loaded and then select
-        try { await loadHoldings(createdPortfolio.id); } catch (e) {}
-        selectPortfolio(createdPortfolio);
         // show success step
         setSuccessInfo({ portfolio: createdPortfolio, count: final.length });
         setStep(3);

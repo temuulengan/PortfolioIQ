@@ -38,16 +38,7 @@
       }
     },
     "plugins": [
-      "expo-font",
-      [
-        "@sentry/react-native/expo",
-        {
-          "url": "https://sentry.io/",
-          "project": "react-native",
-          "organization": "temuulenn"
-        }
-      ],
-      "@sentry/react-native"
+      "expo-font"
     ]
   }
 }

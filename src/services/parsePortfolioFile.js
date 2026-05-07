@@ -3,10 +3,11 @@
 
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
+import { processInChunks } from '../utils/idleScheduler';
 
 const headerCandidates = {
   ticker: ['ticker', 'symbol', 'code'],
-  shares: ['shares', 'qty', 'quantity', 'holdings'],
+  shares: ['shares', 'qty', 'quantity'],
   weight: ['weight', 'w', 'allocation', 'percent', '%'],
   avgCost: ['avgcost', 'avg_cost', 'avg price', 'avgprice', 'cost'],
   name: ['name', 'description'],
@@ -18,7 +19,20 @@ const normalizeHeader = (h) => (h || '').toString().trim().toLowerCase();
 const detectColumnMap = (headers) => {
   const map = {};
   const lower = headers.map(normalizeHeader);
+
+  // Prefer exact header matches, then startsWith, then includes — avoids accidental
+  // substring matches (e.g. 'holdings' meaning market value being detected as shares).
   const findKey = (candidates) => {
+    for (const cand of candidates) {
+      for (let i = 0; i < lower.length; i++) {
+        if (lower[i] === cand) return i;
+      }
+    }
+    for (const cand of candidates) {
+      for (let i = 0; i < lower.length; i++) {
+        if (lower[i].startsWith(cand)) return i;
+      }
+    }
     for (const cand of candidates) {
       for (let i = 0; i < lower.length; i++) {
         if (lower[i].includes(cand)) return i;
@@ -52,25 +66,38 @@ export async function parsePortfolioFile(file) {
   const name = (file.name || file.uri || '').toLowerCase();
   try {
     if (name.endsWith('.csv')) {
-      // fetch file body then parse
+      // fetch file body then parse in streaming/step mode to avoid blocking the JS thread
       const text = await (await fetch(file.uri)).text();
-      const parsed = Papa.parse(text, { skipEmptyLines: true });
-      const data = parsed.data;
-      if (!data || !data.length) return { rows: [], errors: ['Empty CSV'] };
-      const headers = data[0].map(h => h || '');
-      const map = detectColumnMap(headers);
-      const rows = [];
-      for (let i = 1; i < data.length; i++) {
-        const r = data[i];
-        if (!r || r.every(c => (c || '').toString().trim() === '')) continue;
-        const ticker = (r[map.ticker] || '').toString().trim();
-        const shares = map.shares !== undefined ? toNumber(r[map.shares]) : null;
-        const weight = map.weight !== undefined ? toNumber(r[map.weight]) : null;
-        const avgCost = map.avgCost !== undefined ? toNumber(r[map.avgCost]) : null;
-        const currentValue = map.currentValue !== undefined ? toNumber(r[map.currentValue]) : null;
-        rows.push({ ticker, shares, weight, avgCost, currentValue, raw: r });
-      }
-      return { rows, errors: [] };
+      return await new Promise((resolve) => {
+        const dataRows = [];
+        let headers = null;
+        Papa.parse(text, {
+          skipEmptyLines: true,
+          step: function(results) {
+            const row = results.data;
+            if (!headers) {
+              headers = row.map(h => h || '');
+              return;
+            }
+            dataRows.push(row);
+          },
+          complete: function() {
+            if (!headers || dataRows.length === 0) return resolve({ rows: [], errors: ['Empty CSV'] });
+            const map = detectColumnMap(headers);
+            const rows = [];
+            // process CSV rows in idle/chunks to avoid blocking
+            processInChunks(dataRows, (r) => {
+              if (!r || r.every(c => (c || '').toString().trim() === '')) return;
+              const ticker = (r[map.ticker] || '').toString().trim();
+              const shares = map.shares !== undefined ? toNumber(r[map.shares]) : null;
+              const weight = map.weight !== undefined ? toNumber(r[map.weight]) : null;
+              const avgCost = map.avgCost !== undefined ? toNumber(r[map.avgCost]) : null;
+              const currentValue = map.currentValue !== undefined ? toNumber(r[map.currentValue]) : null;
+              rows.push({ ticker, shares, weight, avgCost, currentValue, raw: r });
+            }, { chunkSize: 100, timeout: 16 }).then(() => resolve({ rows, errors: [] })).catch((e) => resolve({ rows: [], errors: [e.message || 'Parse error'] }));
+          }
+        });
+      });
     }
 
     if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
@@ -82,17 +109,18 @@ export async function parsePortfolioFile(file) {
       if (!json || !json.length) return { rows: [], errors: ['Empty sheet'] };
       const headers = json[0].map(h => h || '');
       const map = detectColumnMap(headers);
+      // Process rows in small batches using idle scheduler to avoid long JS blocking
       const rows = [];
-      for (let i = 1; i < json.length; i++) {
-        const r = json[i];
-        if (!r || r.every(c => (c || '').toString().trim() === '')) continue;
+      const rawRows = json.slice(1);
+      await processInChunks(rawRows, (r) => {
+        if (!r || r.every(c => (c || '').toString().trim() === '')) return;
         const ticker = (r[map.ticker] || '').toString().trim();
         const shares = map.shares !== undefined ? toNumber(r[map.shares]) : null;
         const weight = map.weight !== undefined ? toNumber(r[map.weight]) : null;
         const avgCost = map.avgCost !== undefined ? toNumber(r[map.avgCost]) : null;
         const currentValue = map.currentValue !== undefined ? toNumber(r[map.currentValue]) : null;
         rows.push({ ticker, shares, weight, avgCost, currentValue, raw: r });
-      }
+      }, { chunkSize: 100, timeout: 16 });
       return { rows, errors: [] };
     }
 

@@ -1,5 +1,6 @@
-import React, { useContext, useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Dimensions } from 'react-native';
+import React, { useContext, useState, useEffect, useMemo } from 'react';
+import { runWhenIdle } from '../utils/idleScheduler';
+import { View, StyleSheet, ScrollView, Dimensions, InteractionManager } from 'react-native';
 import { Text, Card, Title, Chip, Surface, SegmentedButtons, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LineChart, PieChart } from 'react-native-chart-kit';
@@ -28,11 +29,11 @@ const AnalyticsScreen = () => {
 
   const screenWidth = Dimensions.get('window').width;
 
-  const totalValue = calculatePortfolioValue(holdings);
-  const allocations = calculateAllocation(holdings);
-  const assetTypeAllocations = calculateAssetTypeAllocation(holdings);
-  const topPerformers = getTopPerformers(holdings, 5);
-  const bottomPerformers = getBottomPerformers(holdings, 5);
+  const totalValue = useMemo(() => calculatePortfolioValue(holdings), [holdings]);
+  const allocations = useMemo(() => calculateAllocation(holdings), [holdings]);
+  const assetTypeAllocations = useMemo(() => calculateAssetTypeAllocation(holdings), [holdings]);
+  const topPerformers = useMemo(() => getTopPerformers(holdings, 5), [holdings]);
+  const bottomPerformers = useMemo(() => getBottomPerformers(holdings, 5), [holdings]);
 
   // Load historical data when portfolio or time range changes
   useEffect(() => {
@@ -70,7 +71,9 @@ const AnalyticsScreen = () => {
       }
     };
     
-    loadHistoricalData();
+    InteractionManager.runAfterInteractions(() => {
+      loadHistoricalData();
+    });
   }, [selectedPortfolio, timeRange, holdings]);
 
   // Prepare line chart data from historical data

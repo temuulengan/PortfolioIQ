@@ -1,4 +1,5 @@
 import React, { useContext, useEffect, useState, useCallback } from 'react';
+import { InteractionManager } from 'react-native';
 import {
   View,
   StyleSheet,
@@ -22,10 +23,11 @@ import {
 } from 'react-native-paper';
 import DeletePortfolioDialog from '../components/DeletePortfolioDialog';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { PortfolioContext } from '../context/PortfolioContext';
+import { PortfolioListContext } from '../context/PortfolioListContext';
 import { formatCurrency, formatPercent } from '../../shared/helpers';
 import { COLORS, getGainLossColor } from '../../shared/colors';
 import { getPortfolioHoldings } from '../../services/firebase/firebase';
+import { AuthContext } from '../context/AuthContext';
 import {
   calculatePortfolioValue,
   calculatePortfolioCostBasis,
@@ -37,14 +39,13 @@ const PortfoliosScreen = ({ navigation }) => {
   const {
     portfolios,
     selectedPortfolio,
-    holdings,
     loading,
     createNewPortfolio,
     updateExistingPortfolio,
     deleteExistingPortfolio,
     selectPortfolio,
     loadPortfolios,
-  } = useContext(PortfolioContext);
+  } = useContext(PortfolioListContext);
 
   const [menuVisible, setMenuVisible] = useState(null);
   const [dialogVisible, setDialogVisible] = useState(false);
@@ -55,52 +56,57 @@ const PortfoliosScreen = ({ navigation }) => {
   const [errors, setErrors] = useState({});
   const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  // dialog owns the typed input; parent does not need to track it
-  // kept state: deleteError to surface errors returned from delete operation
   const [deleteError, setDeleteError] = useState(null);
   const [portfolioHoldingsMap, setPortfolioHoldingsMap] = useState({});
+
+  const { user, loading: authLoading } = useContext(AuthContext);
 
   useEffect(() => {
     let isMounted = true;
 
     const loadAllPortfolioHoldings = async () => {
+      if (authLoading) return;
+      if (!user) {
+        if (isMounted) setPortfolioHoldingsMap({});
+        return;
+      }
+
       if (portfolios.length === 0) {
-        if (isMounted) {
-          setPortfolioHoldingsMap({});
-        }
+        if (isMounted) setPortfolioHoldingsMap({});
         return;
       }
 
       try {
         const results = await Promise.all(
           portfolios.map(async (portfolio) => {
-            const portfolioHoldings = await getPortfolioHoldings(portfolio.id);
-            return [portfolio.id, portfolioHoldings];
+            try {
+              const portfolioHoldings = await getPortfolioHoldings(portfolio.id);
+              return [portfolio.id, portfolioHoldings];
+            } catch (err) {
+              console.warn('Skipping holdings fetch for portfolio due to error:', err && err.message ? err.message : err);
+              return [portfolio.id, []];
+            }
           })
         );
 
-        if (isMounted) {
-          setPortfolioHoldingsMap(Object.fromEntries(results));
-        }
+        if (isMounted) setPortfolioHoldingsMap(Object.fromEntries(results));
       } catch (error) {
-        console.error('Error loading portfolio holdings summaries:', error);
+        console.error('Error loading portfolio holdings summaries:', error && error.message ? error.message : error);
       }
     };
 
-    loadAllPortfolioHoldings();
+    const interaction = InteractionManager.runAfterInteractions(loadAllPortfolioHoldings);
 
     return () => {
       isMounted = false;
+      interaction.cancel && interaction.cancel();
     };
-  }, [portfolios]);
+  }, [portfolios, user, authLoading]);
 
   useEffect(() => {
+    // keep portfolioHoldingsMap in sync when selection changes
     if (!selectedPortfolio?.id) return;
-    setPortfolioHoldingsMap((prev) => ({
-      ...prev,
-      [selectedPortfolio.id]: holdings,
-    }));
-  }, [selectedPortfolio?.id, holdings]);
+  }, [selectedPortfolio?.id]);
 
   const getHoldingsForPortfolio = (portfolioId) => {
     return portfolioHoldingsMap[portfolioId] || [];
@@ -181,19 +187,21 @@ const PortfoliosScreen = ({ navigation }) => {
   }, [deleteTarget, deleteExistingPortfolio]);
 
   const handleDeletePortfolio = useCallback((portfolio) => {
-    // Show a stronger confirmation dialog requiring the user to type the portfolio name
     setMenuVisible(null);
     setDeleteTarget(portfolio);
     setDeleteError(null);
     setDeleteDialogVisible(true);
   }, []);
 
+  // ✅ FIXED: moved here, above any early return
+  const handleDismissDelete = useCallback(() => setDeleteDialogVisible(false), []);
+
   const handleSelectPortfolio = (portfolio) => {
     selectPortfolio(portfolio);
     setMenuVisible(null);
   };
 
-  const renderPortfolioCard = ({ item }) => {
+  const renderPortfolioCard = useCallback(({ item }) => {
     const portfolioHoldings = getHoldingsForPortfolio(item.id);
     const totalValue = calculatePortfolioValue(portfolioHoldings);
     const costBasis = calculatePortfolioCostBasis(portfolioHoldings);
@@ -203,13 +211,13 @@ const PortfoliosScreen = ({ navigation }) => {
     const isSelected = selectedPortfolio?.id === item.id;
 
     return (
-      <Card
-        style={[
-          styles.portfolioCard,
-          isSelected && styles.selectedCard,
-        ]}
-        onPress={() => handleSelectPortfolio(item)}
-      >
+        <Card
+          style={[
+            styles.portfolioCard,
+            isSelected && styles.selectedCard,
+          ]}
+          onPress={() => handleSelectPortfolio(item)}
+        >
         <Card.Content>
           <View style={styles.cardHeader}>
             <View style={styles.cardTitle}>
@@ -307,7 +315,7 @@ const PortfoliosScreen = ({ navigation }) => {
         </Card.Content>
       </Card>
     );
-  };
+  }, [getHoldingsForPortfolio, selectedPortfolio, handleSelectPortfolio]);
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
@@ -316,7 +324,6 @@ const PortfoliosScreen = ({ navigation }) => {
         size={80}
         color={COLORS.surfaceVariant}
       />
-      
       <Text style={styles.emptyTitle}>No Portfolios</Text>
       <Text style={styles.emptyText}>
         Create your first portfolio to start tracking investments
@@ -324,6 +331,7 @@ const PortfoliosScreen = ({ navigation }) => {
     </View>
   );
 
+  // ✅ Early return is now AFTER all hooks
   if (loading && portfolios.length === 0) {
     return (
       <View style={styles.loadingContainer}>
@@ -332,9 +340,6 @@ const PortfoliosScreen = ({ navigation }) => {
       </View>
     );
   }
-
-    // Delete confirmation dialog (type-to-confirm) — render directly with stable callbacks
-    const handleDismissDelete = useCallback(() => setDeleteDialogVisible(false), []);
 
   return (
     <View style={styles.container}>
@@ -361,6 +366,10 @@ const PortfoliosScreen = ({ navigation }) => {
         renderItem={renderPortfolioCard}
         keyExtractor={(item) => item.id}
         ListEmptyComponent={renderEmpty}
+        initialNumToRender={8}
+        maxToRenderPerBatch={8}
+        windowSize={5}
+        removeClippedSubviews={true}
         contentContainerStyle={
           portfolios.length === 0 ? styles.emptyListContent : styles.listContent
         }

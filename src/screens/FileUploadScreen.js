@@ -8,7 +8,7 @@ import PortfolioFileUpload from '../components/PortfolioFileUpload';
 import ReconciliationPanel from '../components/ReconciliationPanel';
 import useFileUploadPipeline from '../hooks/useFileUploadPipeline';
 
-import { runBridgewaterAnalysis } from '../../shared/bridgewaterAnalysis';
+import { runBridgewaterAnalysis } from '../workers/analyticsWorker';
 import { runMonteCarloAsync } from '../../services/simulations/monteCarlo';
 import { addHolding } from '../../services/firebase/firebase';
 import { useContext } from 'react';
@@ -113,18 +113,27 @@ const FileUploadScreen = () => {
     }
     // map final holdings to runBridgewater and monteCarlo inputs (optional background tasks)
     const bwHoldings = final.map(h => ({ symbol: h.symbol, quantity: h.quantity || 0, currentPrice: h.currentPrice || 0 }));
-    (async () => {
-      try {
-        await runBridgewaterAnalysis(bwHoldings, { lookbackDays: 252 });
-      } catch (e) { console.error('Background Bridgewater analysis failed', e); }
-    })();
-    // monte carlo in background
-    (async () => {
-      try {
-        const mcAssets = final.map(h => ({ S0: h.currentPrice || 0, quantity: h.quantity || 0, ticker: h.symbol }));
-        await runMonteCarloAsync({ assets: mcAssets, N: 2000, steps: 252, sampleCount: 25 });
-      } catch (e) { console.error('Background Monte Carlo failed', e); }
-    })();
+    const runBackgroundAnalyses = () => {
+      (async () => {
+        try {
+          await runBridgewaterAnalysis(bwHoldings, { lookbackDays: 252 });
+        } catch (e) { console.error('Background Bridgewater analysis failed', e); }
+      })();
+      // monte carlo in background
+      (async () => {
+        try {
+          const mcAssets = final.map(h => ({ S0: h.currentPrice || 0, quantity: h.quantity || 0, ticker: h.symbol }));
+          await runMonteCarloAsync({ assets: mcAssets, N: 2000, steps: 252, sampleCount: 25 });
+        } catch (e) { console.error('Background Monte Carlo failed', e); }
+      })();
+    };
+    try {
+      const { InteractionManager } = require('react-native');
+      InteractionManager.runAfterInteractions(runBackgroundAnalyses);
+    } catch (e) {
+      // fallback
+      runBackgroundAnalyses();
+    }
   };
 
   return (

@@ -1,3 +1,6 @@
+// Ensure InteractionManager shim is applied as early as possible to avoid
+// RN deprecation warnings and to schedule long tasks via requestIdleCallback.
+import './src/utils/interactionShim';
 import React, { use, useCallback, useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { LogBox } from 'react-native';
@@ -11,7 +14,6 @@ import { theme } from './shared/theme';
 import * as SplashScreen from 'expo-splash-screen';
 import { getAuth } from 'firebase/auth';
 import { View } from 'react-native';
-import { get } from 'react-native/Libraries/NativeComponent/NativeComponentRegistry';
 
 // Ignore VirtualizedList warning
 LogBox.ignoreLogs(['VirtualizedLists should never be nested']);

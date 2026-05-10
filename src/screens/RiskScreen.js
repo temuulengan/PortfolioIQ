@@ -1,5 +1,5 @@
-import React, { useContext, useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import React, { useContext, useEffect, useState, useMemo } from 'react';
+import { View, StyleSheet, ScrollView, InteractionManager } from 'react-native';
 import { Text, Card, Title, Surface, ProgressBar, Chip, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { PortfolioContext } from '../context/PortfolioContext';
@@ -10,7 +10,7 @@ import {
   calculateDiversificationScore,
   isDiversified,
 } from '../../shared/calculations';
-import { runBridgewaterAnalysis } from '../../shared/bridgewaterAnalysis';
+import { runBridgewaterAnalysis } from '../workers/analyticsWorker';
 import { RISK_THRESHOLDS, DIVERSIFICATION } from '../../shared/constants';
 import { COLORS, getRiskLevelColor } from '../../shared/colors';
 
@@ -48,7 +48,10 @@ const RiskScreen = () => {
       }
     };
 
-    analyzeBridgewater();
+    // Defer heavy analysis until after navigation/animations finish
+    InteractionManager.runAfterInteractions(() => {
+      analyzeBridgewater();
+    });
   }, [selectedPortfolio?.id, holdings]);
 
   if (!selectedPortfolio || holdings.length === 0) {
@@ -63,11 +66,11 @@ const RiskScreen = () => {
     );
   }
 
-  const beta = calculatePortfolioBeta(holdings);
-  const volatility = calculateVolatility(holdings);
-  const concentrationRisk = calculateConcentrationRisk(holdings);
-  const diversificationScore = calculateDiversificationScore(holdings);
-  const isWellDiversified = isDiversified(holdings);
+  const beta = useMemo(() => calculatePortfolioBeta(holdings), [holdings]);
+  const volatility = useMemo(() => calculateVolatility(holdings), [holdings]);
+  const concentrationRisk = useMemo(() => calculateConcentrationRisk(holdings), [holdings]);
+  const diversificationScore = useMemo(() => calculateDiversificationScore(holdings), [holdings]);
+  const isWellDiversified = useMemo(() => isDiversified(holdings), [holdings]);
 
   const getBetaRiskLevel = (beta) => {
     if (beta < RISK_THRESHOLDS.LOW_BETA) return { level: 'Low', color: COLORS.success };

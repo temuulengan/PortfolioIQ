@@ -19,9 +19,13 @@ import { calculatePortfolioValue } from '../../shared/calculations';
  */
 export const createPortfolioSnapshot = async (portfolioId, holdings) => {
   try {
+    const user = getCurrentUser();
+    if (!user) throw new Error('User not authenticated');
+
     const totalValue = calculatePortfolioValue(holdings);
     
     const snapshot = {
+      userId: user.uid,
       portfolioId,
       date: Timestamp.now(),
       totalValue,

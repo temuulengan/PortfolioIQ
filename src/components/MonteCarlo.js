@@ -3,8 +3,8 @@ import { View, StyleSheet, Dimensions, TouchableOpacity, ScrollView } from 'reac
 import { Card, Text, ActivityIndicator } from 'react-native-paper';
 import Svg, { Polyline, Polygon, Line, Text as SvgText, Circle } from 'react-native-svg';
 import { COLORS } from '../../shared/colors';
-import { runMonteCarloAsync } from '../../services/simulations/monteCarlo';
-import { runBridgewaterAnalysis } from '../../shared/bridgewaterAnalysis';
+import { runMonteCarlo, runBridgewaterAnalysis } from '../workers/analyticsWorker';
+import { runWhenIdle } from '../utils/idleScheduler';
 
 // ─── Layout constants ────────────────────────────────────────────────────────
 const CARD_WIDTH = Dimensions.get('window').width - 32;
@@ -33,15 +33,15 @@ const percentilePath = (allPaths, allFinal, p) => {
 };
 
 const fmt = (v) => {
-  if (v >= 1_000_000) return '$' + (v / 1_000_000).toFixed(2) + 'M';
-  if (v >= 1_000) return '$' + Math.round(v).toLocaleString();
+  if (v >= 1000000) return '$' + (v / 1000000).toFixed(2) + 'M';
+  if (v >= 1000) return '$' + Math.round(v).toLocaleString();
   return '$' + Math.round(v);
 };
 
 const fmtTick = (v) => {
-  if (Math.abs(v) >= 1_000_000) return '$' + (v / 1_000_000).toFixed(1) + 'M';
-  if (Math.abs(v) >= 10_000) return '$' + Math.round(v / 1000) + 'k';
-  if (Math.abs(v) >= 1_000) return '$' + (v / 1000).toFixed(1) + 'k';
+  if (Math.abs(v) >= 1000000) return '$' + (v / 1000000).toFixed(1) + 'M';
+  if (Math.abs(v) >= 10000) return '$' + Math.round(v / 1000) + 'k';
+  if (Math.abs(v) >= 1000) return '$' + (v / 1000).toFixed(1) + 'k';
   return '$' + Math.round(v);
 };
 
@@ -157,12 +157,15 @@ const MonteCarlo = ({ holdings = [], portfolioValue = 0, horizonYears = 1 }) => 
   React.useEffect(() => {
     let mounted = true;
     if (!holdings || holdings.length < 2) { setBwResults(null); return () => { mounted = false; }; }
-    (async () => {
+    // Run Bridgewater analysis when idle to avoid blocking UI on mount/tab switch
+    const job = runWhenIdle(async () => {
       try {
         const res = await runBridgewaterAnalysis(holdings, { lookbackDays: 252 });
         if (mounted && res?.success) setBwResults(res);
-      } catch { if (mounted) setBwResults(null); }
-    })();
+      } catch (e) {
+        if (mounted) setBwResults(null);
+      }
+    });
     return () => { mounted = false; };
   }, [holdings]);
 
@@ -189,7 +192,10 @@ const MonteCarlo = ({ holdings = [], portfolioValue = 0, horizonYears = 1 }) => 
     setLoading(true);
     let cancelled = false;
 
-    runMonteCarloAsync({
+    // Defer Monte Carlo runs to idle time to keep navigation & UI responsive
+    const job = runWhenIdle(async () => {
+      try {
+        const sim = await runMonteCarlo({
       assets,
       N: Npaths,
       steps: Math.round(252 * horizon),
@@ -199,14 +205,15 @@ const MonteCarlo = ({ holdings = [], portfolioValue = 0, horizonYears = 1 }) => 
       dist,
       studentDf,
       shrinkageAlpha,
-    }).then((sim) => {
-      if (!mounted || cancelled) return;
-      setResults(sim);
-      setLoading(false);
-    }).catch(() => {
-      if (!mounted || cancelled) return;
-      setResults(null);
-      setLoading(false);
+        });
+        if (!mounted || cancelled) return;
+        setResults(sim);
+        setLoading(false);
+      } catch (err) {
+        if (!mounted || cancelled) return;
+        setResults(null);
+        setLoading(false);
+      }
     });
 
     return () => { mounted = false; cancelled = true; };

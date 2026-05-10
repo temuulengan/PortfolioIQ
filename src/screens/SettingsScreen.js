@@ -90,7 +90,7 @@ const SettingsScreen = () => {
             label={displayName?.substring(0, 2).toUpperCase() || 'U'}
             style={styles.avatar}
           />
-          <Text style={styles.displayName}>{displayName || 'User'}</Text>
+          <Text style={styles.displayName}>{displayName || user?.displayName || user?.email || ''}</Text>
           <Text style={styles.email}>{user?.email}</Text>
         </Surface>
       )}

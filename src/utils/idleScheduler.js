@@ -54,8 +54,4 @@ async function processInChunks(items, processor, { chunkSize = 50, timeout = 30 
   });
 }
 
-module.exports = {
-  runWhenIdle,
-  cancelIdle,
-  processInChunks,
-};
+export { runWhenIdle, cancelIdle, processInChunks };

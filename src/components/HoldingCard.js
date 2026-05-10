@@ -163,4 +163,16 @@ const styles = StyleSheet.create({
   },
 });
 
-export default HoldingCard;
+const holdingAreEqual = (prevProps, nextProps) => {
+  const p = prevProps.holding || {};
+  const n = nextProps.holding || {};
+  return (
+    p.id === n.id &&
+    p.quantity === n.quantity &&
+    p.currentPrice === n.currentPrice &&
+    p.purchasePrice === n.purchasePrice &&
+    p.lastUpdated === n.lastUpdated
+  );
+};
+
+export default React.memo(HoldingCard, holdingAreEqual);

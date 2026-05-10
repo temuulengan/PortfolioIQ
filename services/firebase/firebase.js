@@ -14,6 +14,7 @@ import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 import {
   getFirestore,
   initializeFirestore,
+  setLogLevel,
   collection,
   doc,
   addDoc,
@@ -59,6 +60,13 @@ try {
 } catch (e) {
   // Fallback to getFirestore if initializeFirestore is not available or fails
   db = getFirestore(app);
+}
+
+// Reduce Firestore client log verbosity to hide transport-level WARNs
+try {
+  setLogLevel('error');
+} catch (err) {
+  // ignore if unavailable
 }
 
 // ==================== AUTH FUNCTIONS ====================

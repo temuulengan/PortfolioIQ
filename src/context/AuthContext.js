@@ -6,7 +6,7 @@ import {
   getCurrentUser,
   resetPassword as resetUserPassword,
   onAuthChange,
-} from '../../services/firebase/firebase';
+} from '../../services/firebase/firebase';≠≠
 
 export const AuthContext = createContext();
 

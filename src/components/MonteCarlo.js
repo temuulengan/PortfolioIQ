@@ -3,7 +3,8 @@ import { View, StyleSheet, Dimensions, TouchableOpacity, ScrollView } from 'reac
 import { Card, Text, ActivityIndicator } from 'react-native-paper';
 import Svg, { Polyline, Polygon, Line, Text as SvgText, Circle } from 'react-native-svg';
 import { COLORS } from '../../shared/colors';
-import { runMonteCarlo, runBridgewaterAnalysis } from '../workers/analyticsWorker';
+import { runMonteCarloAsync } from '../../services/simulations/monteCarlo';
+import { runBridgewaterAnalysis } from '../../shared/bridgewaterAnalysis';
 import { runWhenIdle } from '../utils/idleScheduler';
 
 // ─── Layout constants ────────────────────────────────────────────────────────
@@ -195,7 +196,7 @@ const MonteCarlo = ({ holdings = [], portfolioValue = 0, horizonYears = 1 }) => 
     // Defer Monte Carlo runs to idle time to keep navigation & UI responsive
     const job = runWhenIdle(async () => {
       try {
-        const sim = await runMonteCarlo({
+        const sim = await runMonteCarloAsync({
       assets,
       N: Npaths,
       steps: Math.round(252 * horizon),

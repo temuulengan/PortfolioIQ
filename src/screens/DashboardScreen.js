@@ -1,5 +1,4 @@
 import React, { useContext, useEffect, useMemo } from 'react';
-import { InteractionManager } from 'react-native';
 import {
   View,
   StyleSheet,
@@ -11,8 +10,7 @@ import { Text, Title, Card, FAB, Surface, ActivityIndicator, Chip, Badge } from 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AIInsights from '../components/AIInsights';
 import MonteCarlo from '../components/MonteCarlo';
-import { PortfolioListContext } from '../context/PortfolioListContext';
-import { HoldingsContext } from '../context/HoldingsContext';
+import { PortfolioContext } from '../context/PortfolioContext';
 import { AuthContext } from '../context/AuthContext';
 import { NotificationContext } from '../context/NotificationContext';
 import { formatCurrency, formatPercent } from '../../shared/helpers';
@@ -31,14 +29,20 @@ import { checkMilestones } from '../../services/notifications/notificationServic
 
 const DashboardScreen = ({ navigation }) => {
   const { user } = useContext(AuthContext);
-  const { portfolios, loading, loadPortfolios } = useContext(PortfolioListContext);
-  const { holdings, isLoadingHoldings, refreshing, isRefreshingPrices, refreshPrices } = useContext(HoldingsContext);
+  const {
+    portfolios,
+    selectedPortfolio,
+    holdings,
+    loading,
+    isLoadingHoldings,
+    refreshing,
+    isRefreshingPrices,
+    loadPortfolios,
+    refreshPrices,
+  } = useContext(PortfolioContext);
   const { unreadCount } = useContext(NotificationContext);
   useEffect(() => {
-    const id = InteractionManager.runAfterInteractions(() => {
-      loadPortfolios();
-    });
-    return () => id.cancel && id.cancel();
+    loadPortfolios();
   }, [loadPortfolios]);
   
   // Check for milestones when total value changes (only when holdings finished loading)
@@ -269,15 +273,7 @@ const DashboardScreen = ({ navigation }) => {
                 <Text style={styles.actionText}>Portfolios</Text>
               </TouchableOpacity>
             </View>
-            {__DEV__ && (
-              <FAB
-                small
-                icon="bug"
-                label="Debug Holdings"
-                onPress={() => navigation.navigate('DebugDumpHoldings')}
-                style={{ position: 'absolute', right: 16, bottom: 80, zIndex: 999 }}
-              />
-            )}
+            {/* debug FAB removed */}
           </>
         ) : (
           <View style={styles.emptyContainer}>

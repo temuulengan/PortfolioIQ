@@ -62,3 +62,7 @@ yarn-error.log*
 
 .cache/
 .env.local
+
+# Ensure any dotenv files are ignored
+.env
+.env.*

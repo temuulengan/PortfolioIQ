@@ -1,5 +1,4 @@
 import React, { useContext, useEffect, useState, useCallback } from 'react';
-import { InteractionManager } from 'react-native';
 import {
   View,
   StyleSheet,
@@ -23,7 +22,7 @@ import {
 } from 'react-native-paper';
 import DeletePortfolioDialog from '../components/DeletePortfolioDialog';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { PortfolioListContext } from '../context/PortfolioListContext';
+import { PortfolioContext } from '../context/PortfolioContext';
 import { formatCurrency, formatPercent } from '../../shared/helpers';
 import { COLORS, getGainLossColor } from '../../shared/colors';
 import { getPortfolioHoldings } from '../../services/firebase/firebase';
@@ -39,13 +38,14 @@ const PortfoliosScreen = ({ navigation }) => {
   const {
     portfolios,
     selectedPortfolio,
+    holdings,
     loading,
     createNewPortfolio,
     updateExistingPortfolio,
     deleteExistingPortfolio,
     selectPortfolio,
     loadPortfolios,
-  } = useContext(PortfolioListContext);
+  } = useContext(PortfolioContext);
 
   const [menuVisible, setMenuVisible] = useState(null);
   const [dialogVisible, setDialogVisible] = useState(false);
@@ -95,18 +95,20 @@ const PortfoliosScreen = ({ navigation }) => {
       }
     };
 
-    const interaction = InteractionManager.runAfterInteractions(loadAllPortfolioHoldings);
+    loadAllPortfolioHoldings();
 
     return () => {
       isMounted = false;
-      interaction.cancel && interaction.cancel();
     };
   }, [portfolios, user, authLoading]);
 
   useEffect(() => {
-    // keep portfolioHoldingsMap in sync when selection changes
     if (!selectedPortfolio?.id) return;
-  }, [selectedPortfolio?.id]);
+    setPortfolioHoldingsMap((prev) => ({
+      ...prev,
+      [selectedPortfolio.id]: holdings,
+    }));
+  }, [selectedPortfolio?.id, holdings]);
 
   const getHoldingsForPortfolio = (portfolioId) => {
     return portfolioHoldingsMap[portfolioId] || [];
@@ -201,7 +203,7 @@ const PortfoliosScreen = ({ navigation }) => {
     setMenuVisible(null);
   };
 
-  const renderPortfolioCard = useCallback(({ item }) => {
+  const renderPortfolioCard = ({ item }) => {
     const portfolioHoldings = getHoldingsForPortfolio(item.id);
     const totalValue = calculatePortfolioValue(portfolioHoldings);
     const costBasis = calculatePortfolioCostBasis(portfolioHoldings);
@@ -211,13 +213,13 @@ const PortfoliosScreen = ({ navigation }) => {
     const isSelected = selectedPortfolio?.id === item.id;
 
     return (
-        <Card
-          style={[
-            styles.portfolioCard,
-            isSelected && styles.selectedCard,
-          ]}
-          onPress={() => handleSelectPortfolio(item)}
-        >
+      <Card
+        style={[
+          styles.portfolioCard,
+          isSelected && styles.selectedCard,
+        ]}
+        onPress={() => handleSelectPortfolio(item)}
+      >
         <Card.Content>
           <View style={styles.cardHeader}>
             <View style={styles.cardTitle}>
@@ -315,7 +317,7 @@ const PortfoliosScreen = ({ navigation }) => {
         </Card.Content>
       </Card>
     );
-  }, [getHoldingsForPortfolio, selectedPortfolio, handleSelectPortfolio]);
+  };
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>

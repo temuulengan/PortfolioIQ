@@ -8,7 +8,7 @@ import PortfolioFileUpload from '../components/PortfolioFileUpload';
 import ReconciliationPanel from '../components/ReconciliationPanel';
 import useFileUploadPipeline from '../hooks/useFileUploadPipeline';
 
-import { runBridgewaterAnalysis } from '../workers/analyticsWorker';
+import { runBridgewaterAnalysis } from '../../shared/bridgewaterAnalysis';
 import { runMonteCarloAsync } from '../../services/simulations/monteCarlo';
 import { addHolding } from '../../services/firebase/firebase';
 import { useContext } from 'react';

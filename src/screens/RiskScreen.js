@@ -10,7 +10,7 @@ import {
   calculateDiversificationScore,
   isDiversified,
 } from '../../shared/calculations';
-import { runBridgewaterAnalysis } from '../workers/analyticsWorker';
+import { runBridgewaterAnalysis } from '../../shared/bridgewaterAnalysis';
 import { RISK_THRESHOLDS, DIVERSIFICATION } from '../../shared/constants';
 import { COLORS, getRiskLevelColor } from '../../shared/colors';
 

@@ -9,7 +9,6 @@ import {
   Animated,
 } from 'react-native';
 import {
-    InteractionManager,
   Text,
   FAB,
   Searchbar,
@@ -20,8 +19,7 @@ import {
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
-import { HoldingsContext } from '../context/HoldingsContext';
-import { PortfolioListContext } from '../context/PortfolioListContext';
+import { PortfolioContext } from '../context/PortfolioContext';
 import HoldingCard from '../components/HoldingCard';
 import TransactionsScreen from './TransactionsScreen';
 import { sortBy, formatCurrency } from '../../shared/helpers';
@@ -29,18 +27,16 @@ import { calculatePortfolioValue } from '../../shared/calculations';
 import { COLORS, Spacing, Shadow } from '../../shared/colors';
 
 const HoldingsScreen = ({ navigation }) => {
-  const { selectedPortfolio } = useContext(PortfolioListContext);
   const {
     holdings,
-    isLoadingHoldings,
+    loading,
     refreshing,
-    isRefreshingPrices,
-    loadHoldings,
-    addNewHolding,
-    updateExistingHolding,
-    deleteExistingHolding,
     refreshPrices,
-  } = useContext(HoldingsContext);
+    deleteExistingHolding,
+    selectedPortfolio,
+    updateExistingHolding,
+    isLoadingHoldings,
+  } = useContext(PortfolioContext);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [sortKey, setSortKey] = useState('symbol');
@@ -55,20 +51,6 @@ const HoldingsScreen = ({ navigation }) => {
 
   // Quick-delete with Undo: archive immediately, schedule permanent delete
   const pendingDeletesRef = useRef({});
-    useEffect(() => {
-      let mounted = true;
-      const run = () => {
-        if (!mounted) return;
-        if (selectedPortfolio) {
-          loadHoldings(selectedPortfolio.id).catch(err => console.error('loadHoldings failed:', err));
-        }
-      };
-      const interaction = InteractionManager.runAfterInteractions(run);
-      return () => {
-        mounted = false;
-        interaction.cancel && interaction.cancel();
-      };
-    }, [selectedPortfolio, loadHoldings]);
   const [snackbar, setSnackbar] = useState({ visible: false, message: '', holdingId: null });
 
   const handleDeleteHolding = async (holdingId, symbol, name) => {
@@ -263,7 +245,20 @@ const HoldingsScreen = ({ navigation }) => {
           maxToRenderPerBatch={8}
           windowSize={5}
           removeClippedSubviews={true}
-          renderItem={renderItem}
+          renderItem={({ item }) => (
+            <Swipeable
+              renderRightActions={(progress, dragX) => renderRightActions(progress, dragX, item)}
+              overshootRight={false}
+              friction={2}
+            >
+              <HoldingCard
+                holding={item}
+                onPress={() => {
+                  // Navigate to holding details (not implemented)
+                }}
+              />
+            </Swipeable>
+          )}
           keyExtractor={(item) => item.id}
           ListHeaderComponent={renderHeader}
           ListEmptyComponent={renderEmpty}

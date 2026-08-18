@@ -24,7 +24,6 @@ import {
   calculateAllocation,
   getTopPerformers,
 } from '../../shared/calculations';
-import { runWhenIdle } from '../utils/idleScheduler';
 import { checkMilestones } from '../../services/notifications/notificationService';
 
 const DashboardScreen = ({ navigation }) => {
@@ -41,10 +40,7 @@ const DashboardScreen = ({ navigation }) => {
     refreshPrices,
   } = useContext(PortfolioContext);
   const { unreadCount } = useContext(NotificationContext);
-  useEffect(() => {
-    loadPortfolios();
-  }, [loadPortfolios]);
-  
+
   // Check for milestones when total value changes (only when holdings finished loading)
   const previousTotalRef = React.useRef(null);
 

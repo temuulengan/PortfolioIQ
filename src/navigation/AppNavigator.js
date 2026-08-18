@@ -24,94 +24,94 @@ import DebugDumpHoldingsScreen from '../screens/DebugDumpHoldingsScreen';
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
-const MainTabs = () => {
-  return (
-    <Tab.Navigator
-      lazy={true}
-      screenOptions={({ route }) => ({
-        tabBarIcon: ({ focused, color, size }) => {
-          let iconName;
-
-          if (route.name === 'Dashboard') {
-            iconName = focused ? 'view-dashboard' : 'view-dashboard-outline';
-          } else if (route.name === 'Holdings') {
-            iconName = focused ? 'briefcase' : 'briefcase-outline';
-          } else if (route.name === 'Portfolios') {
-            iconName = focused ? 'folder-multiple' : 'folder-multiple-outline';
-          } else if (route.name === 'Analytics') {
-            iconName = focused ? 'chart-line' : 'chart-line-variant';
-          } else if (route.name === 'Settings') {
-            iconName = focused ? 'cog' : 'cog-outline';
-          }
-
-          return <MaterialCommunityIcons name={iconName} size={size} color={color} />;
-        },
-        tabBarStyle: {
-          backgroundColor: '#FFFFFF',
-          borderTopColor: COLORS.tabBorder,
-          borderTopWidth: 1,
-          elevation: 0,
-          shadowOpacity: 0,
-        },
-        tabBarActiveTintColor: COLORS.tabActive,
-        tabBarInactiveTintColor: COLORS.tabInactive,
-        headerShown: false,
-        unmountOnBlur: false,
-      })}
-    >
-      <Tab.Screen name="Dashboard" component={DashboardScreen} />
-      <Tab.Screen name="Holdings" component={HoldingsScreen} />
-      <Tab.Screen name="Portfolios" component={PortfoliosScreen} />
-      <Tab.Screen name="Analytics" component={AnalyticsScreen} />
-      <Tab.Screen name="Settings" component={SettingsScreen} />
-    </Tab.Navigator>
-  );
+const TAB_ICONS = {
+  Dashboard: ['view-dashboard', 'view-dashboard-outline'],
+  Holdings: ['briefcase', 'briefcase-outline'],
+  Portfolios: ['folder-multiple', 'folder-multiple-outline'],
+  Analytics: ['chart-line', 'chart-line-variant'],
+  Risk: ['shield-check', 'shield-check-outline'],
+  Settings: ['cog', 'cog-outline'],
 };
+
+const MainTabs = () => (
+  <Tab.Navigator
+    screenOptions={({ route }) => ({
+      tabBarIcon: ({ focused, color, size }) => {
+        const [active, inactive] = TAB_ICONS[route.name] || TAB_ICONS.Dashboard;
+        return (
+          <MaterialCommunityIcons
+            name={focused ? active : inactive}
+            size={size}
+            color={color}
+          />
+        );
+      },
+      tabBarStyle: {
+        backgroundColor: '#FFFFFF',
+        borderTopColor: COLORS.tabBorder,
+        borderTopWidth: 1,
+        elevation: 0,
+        shadowOpacity: 0,
+      },
+      tabBarActiveTintColor: COLORS.tabActive,
+      tabBarInactiveTintColor: COLORS.tabInactive,
+      headerShown: false,
+      // In React Navigation v6 these are screen options, not navigator props.
+      lazy: true,
+      unmountOnBlur: false,
+    })}
+  >
+    <Tab.Screen name="Dashboard" component={DashboardScreen} />
+    <Tab.Screen name="Holdings" component={HoldingsScreen} />
+    <Tab.Screen name="Portfolios" component={PortfoliosScreen} />
+    <Tab.Screen name="Analytics" component={AnalyticsScreen} />
+    <Tab.Screen name="Risk" component={RiskScreen} />
+    <Tab.Screen name="Settings" component={SettingsScreen} />
+  </Tab.Navigator>
+);
+
+// Defined at module scope: nesting these inside AppNavigator would create a new
+// component type on every render, remounting the whole tree and losing state.
+const AuthStack = () => (
+  <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Screen name="Auth" component={AuthScreen} />
+  </Stack.Navigator>
+);
+
+const AppStack = () => (
+  <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Screen name="Main" component={MainTabs} />
+    <Stack.Screen
+      name="AddHolding"
+      component={AddHoldingScreen}
+      options={{
+        headerShown: true,
+        title: 'Add Holding',
+        presentation: 'modal',
+      }}
+    />
+    <Stack.Screen
+      name="Notifications"
+      component={NotificationsScreen}
+      options={{ headerShown: false, presentation: 'card' }}
+    />
+    <Stack.Screen
+      name="FileUpload"
+      component={FileUploadScreen}
+      options={{ headerShown: true, title: 'Import Portfolio' }}
+    />
+    {__DEV__ && (
+      <Stack.Screen
+        name="DebugDumpHoldings"
+        component={DebugDumpHoldingsScreen}
+        options={{ headerShown: true, title: 'Debug: Dump Holdings' }}
+      />
+    )}
+  </Stack.Navigator>
+);
 
 const AppNavigator = () => {
   const { user, loading } = useContext(AuthContext);
-  // AuthStack: screens for unauthenticated users
-  const AuthStack = () => (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="Auth" component={AuthScreen} />
-    </Stack.Navigator>
-  );
-
-  // AppStack: screens for authenticated users
-  const AppStack = () => (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="Main" component={MainTabs} />
-      <Stack.Screen 
-        name="AddHolding" 
-        component={AddHoldingScreen}
-        options={{
-          headerShown: true,
-          title: 'Add Holding',
-          presentation: 'modal'
-        }}
-      />
-      <Stack.Screen 
-        name="Notifications" 
-        component={NotificationsScreen}
-        options={{
-          headerShown: false,
-          presentation: 'card'
-        }}
-      />
-      <Stack.Screen 
-        name="FileUpload" 
-        component={FileUploadScreen}
-        options={{ headerShown: true, title: 'Import Portfolio' }}
-      />
-      {__DEV__ && (
-        <Stack.Screen
-          name="DebugDumpHoldings"
-          component={DebugDumpHoldingsScreen}
-          options={{ headerShown: true, title: 'Debug: Dump Holdings' }}
-        />
-      )}
-    </Stack.Navigator>
-  );
 
   if (loading) {
     return (

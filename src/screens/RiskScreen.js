@@ -12,10 +12,14 @@ import {
 } from '../../shared/calculations';
 import { runBridgewaterAnalysis } from '../../shared/bridgewaterAnalysis';
 import { RISK_THRESHOLDS, DIVERSIFICATION } from '../../shared/constants';
+import { holdingsSignature } from '../../shared/helpers';
 import { COLORS, getRiskLevelColor } from '../../shared/colors';
 
 const RiskScreen = () => {
   const { holdings, selectedPortfolio } = useContext(PortfolioContext);
+  // Bridgewater analysis downloads a year of prices per symbol — key it on the
+  // positions, not on the snapshot array identity.
+  const positionsKey = useMemo(() => holdingsSignature(holdings), [holdings]);
   const [bridgewaterResult, setBridgewaterResult] = useState(null);
   const [bridgewaterLoading, setBridgewaterLoading] = useState(false);
   const [bridgewaterError, setBridgewaterError] = useState(null);
@@ -49,10 +53,18 @@ const RiskScreen = () => {
     };
 
     // Defer heavy analysis until after navigation/animations finish
-    InteractionManager.runAfterInteractions(() => {
+    const task = InteractionManager.runAfterInteractions(() => {
       analyzeBridgewater();
     });
-  }, [selectedPortfolio?.id, holdings]);
+
+    return () => task?.cancel?.();
+  }, [selectedPortfolio?.id, positionsKey]);
+
+  const beta = useMemo(() => calculatePortfolioBeta(holdings), [holdings]);
+  const volatility = useMemo(() => calculateVolatility(holdings), [holdings]);
+  const concentrationRisk = useMemo(() => calculateConcentrationRisk(holdings), [holdings]);
+  const diversificationScore = useMemo(() => calculateDiversificationScore(holdings), [holdings]);
+  const isWellDiversified = useMemo(() => isDiversified(holdings), [holdings]);
 
   if (!selectedPortfolio || holdings.length === 0) {
     return (
@@ -66,11 +78,6 @@ const RiskScreen = () => {
     );
   }
 
-  const beta = useMemo(() => calculatePortfolioBeta(holdings), [holdings]);
-  const volatility = useMemo(() => calculateVolatility(holdings), [holdings]);
-  const concentrationRisk = useMemo(() => calculateConcentrationRisk(holdings), [holdings]);
-  const diversificationScore = useMemo(() => calculateDiversificationScore(holdings), [holdings]);
-  const isWellDiversified = useMemo(() => isDiversified(holdings), [holdings]);
 
   const getBetaRiskLevel = (beta) => {
     if (beta < RISK_THRESHOLDS.LOW_BETA) return { level: 'Low', color: COLORS.success };

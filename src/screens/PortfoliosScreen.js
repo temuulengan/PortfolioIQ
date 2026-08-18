@@ -80,7 +80,7 @@ const PortfoliosScreen = ({ navigation }) => {
         const results = await Promise.all(
           portfolios.map(async (portfolio) => {
             try {
-              const portfolioHoldings = await getPortfolioHoldings(portfolio.id);
+              const portfolioHoldings = await getPortfolioHoldings(portfolio.id, user.uid);
               return [portfolio.id, portfolioHoldings];
             } catch (err) {
               console.warn('Skipping holdings fetch for portfolio due to error:', err && err.message ? err.message : err);

@@ -1,4 +1,13 @@
-import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
+import React, {
+  createContext,
+  useState,
+  useEffect,
+  useContext,
+  useRef,
+  useCallback,
+  useMemo,
+} from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthContext } from './AuthContext';
 import {
   getUserPortfolios,
@@ -9,19 +18,21 @@ import {
   addHolding,
   updateHolding,
   deleteHolding,
+  purgeArchivedHoldings,
+  db,
 } from '../../services/firebase/firebase';
-import { getCurrentUser as svcGetCurrentUser } from '../../services/firebase/firebase';
-import {
-  collection,
-  query,
-  where,
-  onSnapshot,
-} from 'firebase/firestore';
-import { db } from '../../services/firebase/firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { getStockPrice, getMultipleStockPrices } from '../../services/api/stockAPI';
-import { checkPriceAlerts, createNotification, NOTIFICATION_TYPES } from '../../services/notifications/notificationService';
+import {
+  checkPriceAlerts,
+  createNotification,
+  NOTIFICATION_TYPES,
+} from '../../services/notifications/notificationService';
 
 export const PortfolioContext = createContext();
+
+const DEFAULT_REFRESH_MINUTES = 15;
+const PRICE_REFRESH_SETTING_KEY = 'priceRefreshInterval';
 
 export const PortfolioProvider = ({ children }) => {
   const { user, loading: authLoading } = useContext(AuthContext);
@@ -32,17 +43,371 @@ export const PortfolioProvider = ({ children }) => {
   const [isLoadingHoldings, setIsLoadingHoldings] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [isRefreshingPrices, setIsRefreshingPrices] = useState(false);
+  const [refreshMinutes, setRefreshMinutes] = useState(DEFAULT_REFRESH_MINUTES);
+
   const holdingsUnsubscribeRef = useRef(null);
   const holdingsPollingRef = useRef(null);
-  const lastPriceRefreshRef = useRef(0);
-  const PRICE_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
   const holdingsKeyRef = useRef('');
   const listeningPortfolioRef = useRef(null);
-  const backgroundPriceIntervalRef = useRef(null);
 
-  // Load portfolios when user changes
+  // The background refresher runs on a timer, long after the effect that started
+  // it closed over state. It reads live values through these refs instead.
+  const holdingsRef = useRef([]);
+  const uidRef = useRef(null);
+  const selectedPortfolioRef = useRef(null);
+
+  useEffect(() => { holdingsRef.current = holdings; }, [holdings]);
+  useEffect(() => { uidRef.current = user?.uid || null; }, [user?.uid]);
+  useEffect(() => { selectedPortfolioRef.current = selectedPortfolio; }, [selectedPortfolio]);
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  const unsubscribeHoldings = useCallback(() => {
+    if (typeof holdingsUnsubscribeRef.current === 'function') {
+      try { holdingsUnsubscribeRef.current(); } catch (e) { /* ignore */ }
+    }
+    holdingsUnsubscribeRef.current = null;
+
+    if (holdingsPollingRef.current) {
+      clearInterval(holdingsPollingRef.current);
+      holdingsPollingRef.current = null;
+    }
+    listeningPortfolioRef.current = null;
+    holdingsKeyRef.current = '';
+  }, []);
+
+  const visibleHoldings = (rows, portfolioId) =>
+    Array.isArray(rows) ? rows.filter((h) => !h.archived && h.portfolioId === portfolioId) : [];
+
+  const startPollingHoldings = useCallback((portfolioId, uid, interval = 8000) => {
+    if (holdingsPollingRef.current) {
+      clearInterval(holdingsPollingRef.current);
+      holdingsPollingRef.current = null;
+    }
+
+    console.warn(`[HoldingsListener] starting polling fallback - portfolio=${portfolioId}`);
+
+    const fetchOnce = async () => {
+      try {
+        const rows = await getPortfolioHoldings(portfolioId, uid);
+        setHoldings(visibleHoldings(rows, portfolioId));
+      } catch (err) {
+        console.error('[HoldingsListener] polling fetch failed:', err);
+      } finally {
+        setIsLoadingHoldings(false);
+      }
+    };
+
+    fetchOnce();
+    holdingsPollingRef.current = setInterval(fetchOnce, interval);
+  }, []);
+
+  /**
+   * Attach a real-time onSnapshot listener for holdings.
+   * UI updates automatically whenever Firestore data changes.
+   */
+  const attachHoldingsListener = useCallback((portfolioId, uid, clearFirst = true) => {
+    // Already listening to this portfolio — nothing to do.
+    if (listeningPortfolioRef.current === portfolioId && holdingsUnsubscribeRef.current) {
+      return;
+    }
+
+    unsubscribeHoldings();
+    setIsLoadingHoldings(true);
+    if (clearFirst) setHoldings([]);
+
+    const q = query(
+      collection(db, 'holdings'),
+      where('portfolioId', '==', portfolioId),
+      where('userId', '==', uid)
+    );
+
+    try {
+      const unsub = onSnapshot(
+        q,
+        (snapshot) => {
+          const rawHoldings = snapshot.docs
+            .map((d) => ({ id: d.id, ...d.data() }))
+            .filter((h) => !h.archived && h.portfolioId === portfolioId);
+
+          // Build a lightweight key from ids + updatedAt to detect real changes
+          const docKey = snapshot.docs
+            .map((d) => {
+              const data = d.data();
+              const updated =
+                data?.updatedAt && typeof data.updatedAt.toMillis === 'function'
+                  ? data.updatedAt.toMillis()
+                  : data?.updatedAt || '';
+              return `${d.id}:${updated}`;
+            })
+            .join('|');
+
+          if (docKey !== holdingsKeyRef.current) {
+            holdingsKeyRef.current = docKey;
+            setHoldings(rawHoldings);
+          }
+          setIsLoadingHoldings(false);
+        },
+        (error) => {
+          console.error('[HoldingsListener] snapshot error:', error);
+          setIsLoadingHoldings(false);
+          // Start polling fallback when the Listen transport fails
+          startPollingHoldings(portfolioId, uid);
+        }
+      );
+
+      holdingsUnsubscribeRef.current = unsub;
+      listeningPortfolioRef.current = portfolioId;
+    } catch (err) {
+      console.error('[HoldingsListener] failed to attach listener:', err);
+      setIsLoadingHoldings(false);
+      startPollingHoldings(portfolioId, uid);
+    }
+  }, [startPollingHoldings, unsubscribeHoldings]);
+
+  // ── Price syncing ─────────────────────────────────────────────────────────
+
+  /**
+   * Fetch fresh prices for the given holdings, persist the ones that moved, and
+   * raise alerts based on the change since the previous refresh.
+   */
+  const syncPrices = useCallback(async (holdingsList, { force = false } = {}) => {
+    const list = Array.isArray(holdingsList) ? holdingsList : [];
+    const symbols = [...new Set(list.map((h) => h.symbol).filter(Boolean))];
+    if (symbols.length === 0) return { success: true };
+
+    const pricesData = await getMultipleStockPrices(symbols, { force });
+    if (!pricesData.length) return { success: true };
+
+    const priceBySymbol = Object.fromEntries(pricesData.map((p) => [p.symbol, p]));
+    const previousPrices = Object.fromEntries(
+      list.filter((h) => h.symbol).map((h) => [h.symbol, h.currentPrice])
+    );
+    const now = new Date().toISOString();
+
+    await Promise.all(
+      list.map(async (holding) => {
+        const priceData = priceBySymbol[holding.symbol];
+        if (!priceData?.price || priceData.price === holding.currentPrice) return;
+        await updateHolding(holding.id, {
+          currentPrice: priceData.price,
+          previousClose: priceData.previousClose ?? holding.previousClose ?? null,
+          lastUpdated: now,
+        });
+      })
+    );
+
+    const updated = list.map((h) => ({
+      ...h,
+      currentPrice: priceBySymbol[h.symbol]?.price ?? h.currentPrice,
+    }));
+    await checkPriceAlerts(updated, previousPrices);
+
+    return { success: true };
+  }, []);
+
+  const refreshPrices = useCallback(async () => {
+    try {
+      setIsRefreshingPrices(true);
+      setRefreshing(true);
+      return await syncPrices(holdingsRef.current, { force: true });
+    } catch (error) {
+      console.error('Error refreshing prices:', error);
+      return { success: false, error: error.message };
+    } finally {
+      setIsRefreshingPrices(false);
+      setRefreshing(false);
+    }
+  }, [syncPrices]);
+
+  // Load the user's price-refresh preference (minutes; 0 disables auto refresh)
   useEffect(() => {
-    
+    let cancelled = false;
+    AsyncStorage.getItem(PRICE_REFRESH_SETTING_KEY)
+      .then((stored) => {
+        const parsed = Number(stored);
+        if (!cancelled && stored != null && Number.isFinite(parsed) && parsed >= 0) {
+          setRefreshMinutes(parsed);
+        }
+      })
+      .catch(() => { /* keep default */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Background price refresher. Reads holdings through a ref so the interval
+  // always sees the current list rather than the empty one it was created with.
+  useEffect(() => {
+    if (!selectedPortfolio || !user || refreshMinutes <= 0) return undefined;
+
+    const intervalId = setInterval(async () => {
+      try {
+        if (!selectedPortfolioRef.current || !uidRef.current) return;
+        await syncPrices(holdingsRef.current);
+      } catch (err) {
+        console.error('[BackgroundPriceRefresh] failed:', err);
+      }
+    }, refreshMinutes * 60 * 1000);
+
+    return () => clearInterval(intervalId);
+  }, [selectedPortfolio?.id, user?.uid, refreshMinutes, syncPrices]);
+
+  // ── Portfolio operations ──────────────────────────────────────────────────
+
+  const loadPortfolios = useCallback(async () => {
+    if (authLoading || !user) return [];
+    try {
+      setLoading(true);
+      const portfolioList = await getUserPortfolios(user.uid);
+      setPortfolios(portfolioList);
+      setSelectedPortfolio((current) => current || portfolioList[0] || null);
+      return portfolioList;
+    } catch (error) {
+      console.error('Error loading portfolios:', error);
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  }, [authLoading, user]);
+
+  const loadHoldings = useCallback(async (portfolioId) => {
+    if (authLoading || !user) return [];
+    try {
+      setIsLoadingHoldings(true);
+      const rows = await getPortfolioHoldings(portfolioId, user.uid);
+      const visible = visibleHoldings(rows, portfolioId);
+      setHoldings(visible);
+      return visible;
+    } catch (err) {
+      console.error('loadHoldings failed:', err);
+      return [];
+    } finally {
+      setIsLoadingHoldings(false);
+    }
+  }, [authLoading, user]);
+
+  const createNewPortfolio = useCallback(async (portfolioData) => {
+    try {
+      if (!user) throw new Error('User not authenticated');
+      const newPortfolio = await createPortfolio(portfolioData, user.uid);
+      setPortfolios((prev) => [...prev, newPortfolio]);
+      // Triggers the effect below → attachHoldingsListener automatically
+      setSelectedPortfolio(newPortfolio);
+      return { success: true, portfolio: newPortfolio };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }, [user]);
+
+  const updateExistingPortfolio = useCallback(async (portfolioId, updates) => {
+    try {
+      await updatePortfolio(portfolioId, updates);
+      setPortfolios((prev) =>
+        prev.map((p) => (p.id === portfolioId ? { ...p, ...updates } : p))
+      );
+      setSelectedPortfolio((prev) =>
+        prev?.id === portfolioId ? { ...prev, ...updates } : prev
+      );
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }, []);
+
+  const deleteExistingPortfolio = useCallback(async (portfolioId) => {
+    try {
+      await deletePortfolio(portfolioId, user?.uid);
+
+      const remaining = portfolios.filter((p) => p.id !== portfolioId);
+      setPortfolios(remaining);
+
+      if (selectedPortfolio?.id === portfolioId) {
+        setHoldings([]);
+        setSelectedPortfolio(remaining[0] || null);
+      }
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }, [user?.uid, portfolios, selectedPortfolio?.id]);
+
+  // ── Holdings operations ───────────────────────────────────────────────────
+
+  const addNewHolding = useCallback(async (holdingData) => {
+    try {
+      if (!selectedPortfolio) throw new Error('No portfolio selected');
+      if (!user) throw new Error('User not authenticated');
+
+      let currentPrice = null;
+      let previousClose = null;
+      try {
+        const priceData = await getStockPrice(holdingData.symbol);
+        currentPrice = priceData.price;
+        previousClose = priceData.previousClose ?? null;
+      } catch (priceError) {
+        // A quote outage should not block recording the position; the next
+        // refresh fills the price in.
+        console.warn(`Could not fetch price for ${holdingData.symbol}:`, priceError.message);
+      }
+
+      // Write to Firestore — onSnapshot pushes the update to the UI automatically
+      const newHolding = await addHolding(
+        selectedPortfolio.id,
+        {
+          ...holdingData,
+          currentPrice,
+          previousClose,
+          lastUpdated: new Date().toISOString(),
+        },
+        user.uid
+      );
+
+      await createNotification({
+        type: NOTIFICATION_TYPES.HOLDING_ADDED,
+        title: 'New Holding Added',
+        message: currentPrice
+          ? `${holdingData.symbol}: ${holdingData.quantity} shares at $${currentPrice.toFixed(2)}`
+          : `${holdingData.symbol}: ${holdingData.quantity} shares`,
+        data: { holdingId: newHolding.id, symbol: holdingData.symbol },
+      });
+
+      return { success: true, holding: newHolding };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }, [selectedPortfolio, user]);
+
+  const updateExistingHolding = useCallback(async (holdingId, updates) => {
+    try {
+      await updateHolding(holdingId, updates);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }, []);
+
+  const deleteExistingHolding = useCallback(async (holdingId) => {
+    try {
+      await deleteHolding(holdingId);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }, []);
+
+  const selectPortfolio = useCallback((portfolio) => setSelectedPortfolio(portfolio), []);
+
+  /**
+   * Called by Settings when the user picks a new refresh cadence (minutes).
+   */
+  const applyPriceRefreshInterval = useCallback((minutes) => {
+    const parsed = Number(minutes);
+    if (Number.isFinite(parsed) && parsed >= 0) setRefreshMinutes(parsed);
+  }, []);
+
+  // ── Lifecycle ─────────────────────────────────────────────────────────────
+
+  // Load portfolios when the signed-in user changes
+  useEffect(() => {
     if (authLoading) return;
     if (user) {
       loadPortfolios();
@@ -52,390 +417,71 @@ export const PortfolioProvider = ({ children }) => {
       setHoldings([]);
       unsubscribeHoldings();
     }
-  }, [user, authLoading]);
+  }, [user, authLoading, loadPortfolios, unsubscribeHoldings]);
 
-  
+  // Attach the holdings listener for the selected portfolio
   useEffect(() => {
-   
-    if (authLoading) return;
+    if (authLoading) return undefined;
 
     if (selectedPortfolio && user) {
       attachHoldingsListener(selectedPortfolio.id, user.uid);
-      // start background price refresher on selected portfolio
-      startBackgroundPriceRefresh();
+
+      // Sweep holdings whose undo-window delete never completed (app killed
+      // mid-timer), so they don't linger invisibly in Firestore forever.
+      purgeArchivedHoldings(selectedPortfolio.id, user.uid).catch((err) =>
+        console.warn('Archived holdings sweep failed:', err.message)
+      );
     } else {
       unsubscribeHoldings();
       setHoldings([]);
       setIsLoadingHoldings(false);
-      stopBackgroundPriceRefresh();
     }
 
     return () => unsubscribeHoldings();
-  }, [selectedPortfolio?.id, user?.uid, authLoading]);
+  }, [selectedPortfolio?.id, user?.uid, authLoading, attachHoldingsListener, unsubscribeHoldings]);
 
-  const startBackgroundPriceRefresh = () => {
-    stopBackgroundPriceRefresh();
-    backgroundPriceIntervalRef.current = setInterval(async () => {
-      try {
-        if (!selectedPortfolio || !user) return;
-        if (!holdings || holdings.length === 0) return;
-        const symbols = holdings.map(h => h.symbol).filter(Boolean);
-        if (symbols.length === 0) return;
-        const pricesData = await getMultipleStockPrices(symbols);
-        const now = new Date().toISOString();
-        await Promise.all(holdings.map(async (holding) => {
-          const priceObj = pricesData.find(p => p.symbol === holding.symbol);
-          if (priceObj && priceObj.price && priceObj.price !== holding.currentPrice) {
-            await updateHolding(holding.id, {
-              currentPrice: priceObj.price,
-              lastUpdated: now,
-            });
-          }
-        }));
-        await checkPriceAlerts(holdings);
-      } catch (err) {
-        console.error('[BackgroundPriceRefresh] failed:', err);
-      }
-    }, PRICE_REFRESH_INTERVAL);
-  };
-
-  const stopBackgroundPriceRefresh = () => {
-    if (backgroundPriceIntervalRef.current) {
-      clearInterval(backgroundPriceIntervalRef.current);
-      backgroundPriceIntervalRef.current = null;
-    }
-  };
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
-
-  const unsubscribeHoldings = () => {
-    if (holdingsUnsubscribeRef.current && typeof holdingsUnsubscribeRef.current === 'function') {
-      try { holdingsUnsubscribeRef.current(); } catch (e) { /* ignore */ }
-      holdingsUnsubscribeRef.current = null;
-    }
-    if (holdingsPollingRef.current) {
-      clearInterval(holdingsPollingRef.current);
-      holdingsPollingRef.current = null;
-    }
-    // stop any background price refresh and clear listening marker
-    stopBackgroundPriceRefresh();
-    listeningPortfolioRef.current = null;
-  };
-
-  const startPollingHoldings = (portfolioId, uid, interval = 8000) => {
-    // clear any existing poller
-    if (holdingsPollingRef.current) {
-      clearInterval(holdingsPollingRef.current);
-      holdingsPollingRef.current = null;
-    }
-
-    console.warn(`[HoldingsListener] starting polling fallback - portfolio=${portfolioId} uid=${uid} interval=${interval}ms`);
-
-    // initial fetch
-    (async () => {
-      try {
-        const rows = await getPortfolioHoldings(portfolioId);
-        const visible = Array.isArray(rows) ? rows.filter(h => !h.archived && h.portfolioId === portfolioId) : [];
-        setHoldings(visible);
-        setIsLoadingHoldings(false);
-      } catch (err) {
-        console.error('[HoldingsListener] polling initial fetch failed:', err);
-        setIsLoadingHoldings(false);
-      }
-    })();
-
-    holdingsPollingRef.current = setInterval(async () => {
-      try {
-        const rows = await getPortfolioHoldings(portfolioId);
-        const visible = Array.isArray(rows) ? rows.filter(h => !h.archived && h.portfolioId === portfolioId) : [];
-        setHoldings(visible);
-      } catch (err) {
-        console.error('[HoldingsListener] polling fetch failed:', err);
-      }
-    }, interval);
-  };
-
-  /**
-   * Attach a real-time onSnapshot listener for holdings.
-   * UI updates automatically whenever Firestore data changes.
-   */
-  const attachHoldingsListener = (portfolioId, uid, clearFirst = true) => {
-    unsubscribeHoldings();
-    setIsLoadingHoldings(true);
-    if (clearFirst) setHoldings([]);
-
-    console.log(`[HoldingsListener] attach requested - portfolio=${portfolioId} uid=${uid}`);
-
-    const q = query(
-      collection(db, 'holdings'),
-      where('portfolioId', '==', portfolioId),
-      where('userId', '==', uid)
-    );
-
-    let unsub = null;
-    try {
-      // prevent re-attaching if already listening to this portfolio
-      if (listeningPortfolioRef.current === portfolioId && holdingsUnsubscribeRef.current) {
-        console.log(`[HoldingsListener] already listening to portfolio=${portfolioId}, skipping reattach`);
-        return;
-      }
-
-      unsub = onSnapshot(q, (snapshot) => {
-        console.log(`[HoldingsListener] snapshot received - portfolio=${portfolioId} uid=${uid} size=${snapshot.size}`);
-        console.log('[HoldingsListener] docIds=', snapshot.docs.map(d => d.id));
-
-        const rawHoldings = snapshot.docs
-          .map(doc => ({ id: doc.id, ...doc.data() }))
-          .filter(h => !h.archived && h.portfolioId === portfolioId);
-
-        // Build a lightweight key from ids + updatedAt to detect real changes
-        const docKey = snapshot.docs.map(d => {
-          const data = d.data();
-          const updated = (data && data.updatedAt && typeof data.updatedAt.toMillis === 'function')
-            ? data.updatedAt.toMillis()
-            : (data && data.updatedAt) || '';
-          return `${d.id}:${updated}`;
-        }).join('|');
-
-        if (docKey !== holdingsKeyRef.current) {
-          holdingsKeyRef.current = docKey;
-          setHoldings(rawHoldings);
-        } else {
-          // No meaningful change — skip updating state to avoid re-render
-        }
-        setIsLoadingHoldings(false);
-        // Note: price refreshes are handled by the background interval (startBackgroundPriceRefresh)
-        if (rawHoldings.length === 0) {
-          // nothing to do
-        }
-      }, (error) => {
-        console.error('[HoldingsListener] Holdings snapshot error:', error);
-        setIsLoadingHoldings(false);
-        // Start polling fallback when Listen transport fails
-        try {
-          startPollingHoldings(portfolioId, uid);
-        } catch (e) {
-          console.error('[HoldingsListener] failed to start polling fallback:', e);
-        }
-      });
-
-      holdingsUnsubscribeRef.current = unsub;
-      listeningPortfolioRef.current = portfolioId;
-    } catch (err) {
-      console.error('[HoldingsListener] Failed to attach holdings snapshot listener:', err);
-      setIsLoadingHoldings(false);
-      // start polling fallback so UI doesn't hang
-      try {
-        startPollingHoldings(portfolioId, uid);
-      } catch (e) {
-        console.error('[HoldingsListener] failed to start polling fallback after attach error:', e);
-      }
-      // ensure we don't leave a dangling unsubscribe
-      if (unsub && typeof unsub === 'function') {
-        try { unsub(); } catch (e) { /* ignore */ }
-      }
-    }
-  };
-
-  // ── Portfolio operations ──────────────────────────────────────────────────
-
-  const loadHoldings = async (portfolioId) => {
-    try {
-      if (authLoading) return;
-      if (!user) return;
-      setIsLoadingHoldings(true);
-      setHoldings([]);
-
-      const rows = await getPortfolioHoldings(portfolioId);
-      const visible = Array.isArray(rows) ? rows.filter(h => !h.archived && h.portfolioId === portfolioId) : [];
-      setHoldings(visible);
-      setIsLoadingHoldings(false);
-      return visible;
-    } catch (err) {
-      console.error('loadHoldings failed:', err);
-      setIsLoadingHoldings(false);
-      return [];
-    }
-  };
-
-  const loadPortfolios = async () => {
-    try {
-      if (authLoading) return;
-      if (!user) return;
-      
-      const svcUser = svcGetCurrentUser && svcGetCurrentUser();
-      if (!svcUser) return;
-      setLoading(true);
-      const portfolioList = await getUserPortfolios(svcUser.uid || user.uid);
-      setPortfolios(portfolioList);
-
-      if (portfolioList.length > 0 && !selectedPortfolio) {
-        setSelectedPortfolio(portfolioList[0]);
-      }
-    } catch (error) {
-      console.error('Error loading portfolios:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const createNewPortfolio = async (portfolioData) => {
-    try {
-      if (!user) throw new Error('User not authenticated');
-      const newPortfolio = await createPortfolio(portfolioData, user.uid);
-      setPortfolios(prev => [...prev, newPortfolio]);
-      // Triggers useEffect → attachHoldingsListener automatically
-      setSelectedPortfolio(newPortfolio);
-      return { success: true, portfolio: newPortfolio };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  };
-
-  const updateExistingPortfolio = async (portfolioId, updates) => {
-    try {
-      await updatePortfolio(portfolioId, updates);
-      const updatedPortfolios = portfolios.map(p =>
-        p.id === portfolioId ? { ...p, ...updates } : p
-      );
-      setPortfolios(updatedPortfolios);
-      if (selectedPortfolio?.id === portfolioId) {
-        setSelectedPortfolio(prev => ({ ...prev, ...updates }));
-      }
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  };
-
-  const deleteExistingPortfolio = async (portfolioId) => {
-    try {
-      await deletePortfolio(portfolioId);
-      const updatedPortfolios = portfolios.filter(p => p.id !== portfolioId);
-      setPortfolios(updatedPortfolios);
-      if (selectedPortfolio?.id === portfolioId) {
-        setHoldings([]);
-        setSelectedPortfolio(updatedPortfolios[0] || null);
-      }
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  };
-
-  // ── Holdings operations ───────────────────────────────────────────────────
-
-  const addNewHolding = async (holdingData) => {
-    try {
-      if (!selectedPortfolio) throw new Error('No portfolio selected');
-      if (!user) throw new Error('User not authenticated');
-
-      const priceData = await getStockPrice(holdingData.symbol);
-      const currentPrice = priceData.price;
-
-      // Write to Firestore — onSnapshot pushes update to UI automatically
-      const newHolding = await addHolding(selectedPortfolio.id, {
-        ...holdingData,
-        currentPrice,
-        lastUpdated: new Date().toISOString(),
-      }, user.uid);
-
-      await createNotification({
-        type: NOTIFICATION_TYPES.HOLDING_ADDED,
-        title: 'New Holding Added',
-        message: `${holdingData.symbol}: ${holdingData.quantity} shares at $${currentPrice.toFixed(2)}`,
-        data: { holdingId: newHolding.id, symbol: holdingData.symbol },
-      });
-
-      return { success: true, holding: newHolding };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  };
-
-  const updateExistingHolding = async (holdingId, updates) => {
-    try {
-      // Write to Firestore — onSnapshot pushes update to UI automatically
-      await updateHolding(holdingId, updates);
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  };
-
-  const deleteExistingHolding = async (holdingId) => {
-    try {
-      // Write to Firestore — onSnapshot pushes update to UI automatically
-      await deleteHolding(holdingId);
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  };
-
-  const refreshPrices = async () => {
-    try {
-      setIsRefreshingPrices(true);
-      setRefreshing(true);
-
-      if (holdings.length === 0) {
-        return { success: true };
-      }
-
-      const symbols = holdings.map(h => h.symbol);
-      const pricesData = await getMultipleStockPrices(symbols);
-
-      // Write updated prices — onSnapshot pushes changes back to UI
-      await Promise.all(holdings.map(async (holding) => {
-        const priceData = pricesData.find(p => p.symbol === holding.symbol);
-        if (priceData && priceData.price) {
-          await updateHolding(holding.id, {
-            currentPrice: priceData.price,
-            lastUpdated: new Date().toISOString(),
-          });
-        }
-      }));
-
-      await checkPriceAlerts(holdings);
-
-      return { success: true };
-    } catch (error) {
-      console.error('Error refreshing prices:', error);
-      return { success: false, error: error.message };
-    } finally {
-      setIsRefreshingPrices(false);
-      setRefreshing(false);
-    }
-  };
-
-  const selectPortfolio = (portfolio) => {
-    
-    setSelectedPortfolio(portfolio);
-  };
-
-  return (
-    <PortfolioContext.Provider
-      value={{
-        portfolios,
-        selectedPortfolio,
-        holdings,
-        loading,
-        isLoadingHoldings,
-        refreshing,
-        isRefreshingPrices,
-        loadPortfolios,
-        loadHoldings,
-        createNewPortfolio,
-        updateExistingPortfolio,
-        deleteExistingPortfolio,
-        addNewHolding,
-        updateExistingHolding,
-        deleteExistingHolding,
-        refreshPrices,
-        selectPortfolio,
-      }}
-    >
-      {children}
-    </PortfolioContext.Provider>
+  const value = useMemo(
+    () => ({
+      portfolios,
+      selectedPortfolio,
+      holdings,
+      loading,
+      isLoadingHoldings,
+      refreshing,
+      isRefreshingPrices,
+      loadPortfolios,
+      loadHoldings,
+      createNewPortfolio,
+      updateExistingPortfolio,
+      deleteExistingPortfolio,
+      addNewHolding,
+      updateExistingHolding,
+      deleteExistingHolding,
+      refreshPrices,
+      selectPortfolio,
+      applyPriceRefreshInterval,
+    }),
+    [
+      portfolios,
+      selectedPortfolio,
+      holdings,
+      loading,
+      isLoadingHoldings,
+      refreshing,
+      isRefreshingPrices,
+      loadPortfolios,
+      loadHoldings,
+      createNewPortfolio,
+      updateExistingPortfolio,
+      deleteExistingPortfolio,
+      addNewHolding,
+      updateExistingHolding,
+      deleteExistingHolding,
+      refreshPrices,
+      selectPortfolio,
+      applyPriceRefreshInterval,
+    ]
   );
+
+  return <PortfolioContext.Provider value={value}>{children}</PortfolioContext.Provider>;
 };

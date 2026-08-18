@@ -1,4 +1,4 @@
-import React, { useContext, useState, useRef, useEffect } from 'react';
+import React, { useContext, useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -121,13 +121,19 @@ const HoldingsScreen = ({ navigation }) => {
     );
   };
 
-  const filteredHoldings = holdings.filter((holding) =>
-    (holding.symbol && holding.symbol.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    (holding.name && holding.name.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const sortedHoldings = useMemo(() => {
+    const needle = searchQuery.trim().toLowerCase();
+    const filtered = needle
+      ? holdings.filter(
+          (holding) =>
+            holding.symbol?.toLowerCase().includes(needle) ||
+            holding.name?.toLowerCase().includes(needle)
+        )
+      : holdings;
+    return sortBy(filtered, sortKey, sortOrder);
+  }, [holdings, searchQuery, sortKey, sortOrder]);
 
-  const sortedHoldings = sortBy(filteredHoldings, sortKey, sortOrder);
-  const totalValue = calculatePortfolioValue(holdings);
+  const totalValue = useMemo(() => calculatePortfolioValue(holdings), [holdings]);
 
   const handleSort = (key) => {
     if (sortKey === key) {
@@ -138,6 +144,25 @@ const HoldingsScreen = ({ navigation }) => {
     }
     setMenuVisible(false);
   };
+
+  // Stable identities: FlatList re-renders every row when these change.
+  const renderItem = useCallback(
+    ({ item }) => (
+      <Swipeable
+        renderRightActions={(progress, dragX) => renderRightActions(progress, dragX, item)}
+        overshootRight={false}
+        friction={2}
+      >
+        <HoldingCard holding={item} />
+      </Swipeable>
+    ),
+    // renderRightActions closes over handleDeleteHolding, which is stable enough
+    // for this purpose — it only reads refs and context callbacks.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
+  const keyExtractor = useCallback((item) => item.id, []);
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
@@ -261,21 +286,8 @@ const HoldingsScreen = ({ navigation }) => {
           maxToRenderPerBatch={8}
           windowSize={5}
           removeClippedSubviews={true}
-          renderItem={({ item }) => (
-            <Swipeable
-              renderRightActions={(progress, dragX) => renderRightActions(progress, dragX, item)}
-              overshootRight={false}
-              friction={2}
-            >
-              <HoldingCard
-                holding={item}
-                onPress={() => {
-                  // Navigate to holding details (not implemented)
-                }}
-              />
-            </Swipeable>
-          )}
-          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
           ListHeaderComponent={renderHeader}
           ListEmptyComponent={renderEmpty}
           ListFooterComponent={

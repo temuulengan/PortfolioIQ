@@ -168,8 +168,19 @@ const annualisedDrift = (value, costTotal, purchaseDate) => {
   return Math.max(-40, Math.min(40, annual));
 };
 
+const runStyles = StyleSheet.create({
+  button: {
+    marginTop: 14,
+    backgroundColor: COLORS.primary,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  buttonLabel: { color: COLORS.textWhite, fontSize: 15, fontWeight: '600' },
+});
+
 // ─── Main component ───────────────────────────────────────────────────────────
-const MonteCarlo = ({ holdings = [], portfolioValue = 0, horizonYears = 1 }) => {
+const MonteCarlo = ({ holdings = [], portfolioValue = 0, horizonYears = 1, autoRun = false }) => {
   const [runKey, setRunKey] = useState(0);
   const [bwResults, setBwResults] = useState(null);
   const [correlated, setCorrelated] = useState(true);
@@ -180,6 +191,10 @@ const MonteCarlo = ({ holdings = [], portfolioValue = 0, horizonYears = 1 }) => 
   const [horizon, setHorizon] = useState(horizonYears);
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  // A full run is seconds of solid CPU on a phone. It starts only when the user
+  // asks for it, and re-runs automatically afterwards as they change controls.
+  const [hasRun, setHasRun] = useState(autoRun);
 
   // Both effects below do expensive work (network history downloads, then a
   // 1000-path simulation). Key them on the positions so a price refresh, which
@@ -211,6 +226,7 @@ const MonteCarlo = ({ holdings = [], portfolioValue = 0, horizonYears = 1 }) => 
   // ── Simulation ────────────────────────────────────────────────────────────
   useEffect(() => {
     let mounted = true;
+    if (!hasRun) return undefined;
     if (!holdings.length || portfolioValue <= 0) { setResults(null); setLoading(false); return undefined; }
 
     const assets = holdings.map((h, i) => {
@@ -228,27 +244,37 @@ const MonteCarlo = ({ holdings = [], portfolioValue = 0, horizonYears = 1 }) => 
 
     const covDaily = bwResults?.covarianceMatrix ?? null;
     setLoading(true);
-    let cancelled = false;
+    setProgress(0);
+    const token = { cancelled: false };
 
     // Defer Monte Carlo runs to idle time to keep navigation & UI responsive
     const job = runWhenIdle(async () => {
       try {
-        const sim = await runMonteCarloAsync({
-      assets,
-      N: Npaths,
-      steps: Math.round(252 * horizon),
-      correlated,
-      covDaily,
-      sampleCount: SAMPLE,
-      dist,
-      studentDf,
-      shrinkageAlpha,
-        });
-        if (!mounted || cancelled) return;
+        const sim = await runMonteCarloAsync(
+          {
+            assets,
+            N: Npaths,
+            steps: Math.round(252 * horizon),
+            horizonYears: horizon,
+            correlated,
+            covDaily,
+            sampleCount: SAMPLE,
+            dist,
+            studentDf,
+            shrinkageAlpha,
+          },
+          {
+            token,
+            onProgress: (value) => {
+              if (mounted && !token.cancelled) setProgress(value);
+            },
+          }
+        );
+        if (!mounted || token.cancelled) return;
         setResults(sim);
         setLoading(false);
       } catch (err) {
-        if (!mounted || cancelled) return;
+        if (!mounted || token.cancelled) return;
         setResults(null);
         setLoading(false);
       }
@@ -256,11 +282,11 @@ const MonteCarlo = ({ holdings = [], portfolioValue = 0, horizonYears = 1 }) => 
 
     return () => {
       mounted = false;
-      cancelled = true;
+      token.cancelled = true;
       cancelIdle(job);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [positionsKey, portfolioValue, horizon, runKey, bwResults, correlated, Npaths, dist]);
+  }, [hasRun, positionsKey, horizon, runKey, bwResults, correlated, Npaths, dist]);
 
   // ── Loading state ─────────────────────────────────────────────────────────
   if (!results && loading) {
@@ -271,7 +297,9 @@ const MonteCarlo = ({ holdings = [], portfolioValue = 0, horizonYears = 1 }) => 
             <View style={styles.loadingRow}>
               <View>
                 <Text style={styles.title}>Simulation</Text>
-                <Text style={styles.subtitle}>Running {Npaths.toLocaleString()} paths…</Text>
+                <Text style={styles.subtitle}>
+                  Running {Npaths.toLocaleString()} paths… {Math.round(progress * 100)}%
+                </Text>
               </View>
               <ActivityIndicator animating size={20} color="#111827" />
             </View>
@@ -282,7 +310,30 @@ const MonteCarlo = ({ holdings = [], portfolioValue = 0, horizonYears = 1 }) => 
     );
   }
 
-  if (!results) return null;
+  if (!results) {
+    if (!holdings.length || portfolioValue <= 0) return null;
+
+    return (
+      <View style={styles.container}>
+        <Card style={styles.card} elevation={0}>
+          <Card.Content style={styles.content}>
+            <Text style={styles.title}>Projection</Text>
+            <Text style={styles.subtitle}>
+              Simulate {Npaths.toLocaleString()} possible paths for this portfolio over {horizon}
+              {horizon === 1 ? ' year' : ' years'}.
+            </Text>
+            <TouchableOpacity
+              style={runStyles.button}
+              onPress={() => setHasRun(true)}
+              activeOpacity={0.8}
+            >
+              <Text style={runStyles.buttonLabel}>Run projection</Text>
+            </TouchableOpacity>
+          </Card.Content>
+        </Card>
+      </View>
+    );
+  }
 
   const { samplePaths, pathP10, pathP50, pathP90, p10, p50, p90, probLoss, avgMaxDd, steps, cvar95 } = results;
 

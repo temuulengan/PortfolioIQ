@@ -1,17 +1,26 @@
-// Pure JS Monte Carlo simulation service
-// Exports runMonteCarlo(options)
-
+// Pure JS Monte Carlo simulation service (GBM, optionally correlated)
+//
+// Performance notes: this runs on the JS thread, which is also the thread that
+// draws the UI, so both the amount of work and the way it is scheduled matter.
+// The hot loop is N x steps x assets, and at the default 1000 paths x 252 steps
+// that is millions of iterations. Two things keep it from freezing the app:
+//
+//   1. No allocation inside the loop. Everything is a preallocated typed array,
+//      and per-path drawdown is tracked incrementally rather than by keeping a
+//      full value series for each path.
+//   2. runMonteCarloAsync yields to the event loop between batches of paths, so
+//      touches, scrolling and navigation still get serviced while it works.
+//
 // Options:
 // - assets: [{ S0, quantity, muAnnual?, sigmaAnnual? }]
 // - N: number of paths
 // - steps: number of timesteps (e.g., 252)
 // - correlated: boolean
 // - covDaily: covariance matrix (daily) if correlated
-// - dailyMeans: array of daily mean returns (optional)
-// - dailyStds: array of daily std dev of returns (optional)
-// - sampleCount: number of sample paths to return for plotting
+// - dailyMeans / dailyStds: per-asset daily stats (alternative to annual inputs)
+// - sampleCount: number of sample paths to retain for plotting
 
-// seedable PRNG (mulberry32) and box-muller using provided RNG
+// seedable PRNG (mulberry32)
 const mulberry32 = (seed) => {
   return function() {
     let t = seed += 0x6D2B79F5;
@@ -26,6 +35,41 @@ const boxMullerWithRng = (rng) => {
   const u2 = rng();
   const r = Math.sqrt(-2 * Math.log(u1));
   return r * Math.cos(2 * Math.PI * u2);
+};
+
+/**
+ * Marsaglia polar normals.
+ *
+ * The dominant cost of this simulation is generating normal draws — one per
+ * asset per step, millions of them. Box-Muller spends a Math.cos on every
+ * single draw; the polar method trades that for a cheap rejection loop (~21%
+ * rejected) and produces *two* normals per log/sqrt pair, so the transcendental
+ * work per draw drops by roughly 4x. Spares are carried between calls.
+ */
+const createNormalSource = (rng) => {
+  let spare = 0;
+  let hasSpare = false;
+
+  return () => {
+    if (hasSpare) {
+      hasSpare = false;
+      return spare;
+    }
+
+    let u;
+    let v;
+    let s;
+    do {
+      u = rng() * 2 - 1;
+      v = rng() * 2 - 1;
+      s = u * u + v * v;
+    } while (s >= 1 || s === 0);
+
+    const factor = Math.sqrt((-2 * Math.log(s)) / s);
+    spare = v * factor;
+    hasSpare = true;
+    return u * factor;
+  };
 };
 
 // Gamma sampler (Marsaglia & Tsang) for shape > 0
@@ -74,101 +118,104 @@ const cholesky = (A) => {
   return L;
 };
 
-const matVecMul = (M, v) => M.map(row => row.reduce((s, val, i) => s + val * v[i], 0));
-
-const percentile = (arr, p) => {
-  if (!arr || !arr.length) return 0;
-  const s = [...arr].sort((a, b) => a - b);
+const percentile = (sortedOrRaw, p, presorted = false) => {
+  if (!sortedOrRaw || !sortedOrRaw.length) return 0;
+  const s = presorted ? sortedOrRaw : [...sortedOrRaw].sort((a, b) => a - b);
   const idx = Math.max(0, Math.min(s.length - 1, Math.round((p / 100) * (s.length - 1))));
   return s[idx];
 };
 
-// Async runner: attempts to run simulation in a background thread using react-native-threads.
-// If threads are unavailable, falls back to running on the main JS thread (wrapped in a Promise).
-export async function runMonteCarloAsync(args) {
-  try {
-    // eslint-disable-next-line import/no-extraneous-dependencies
-    const { Thread } = require('react-native-threads');
-    if (Thread) {
-      return await new Promise((resolve, reject) => {
-        try {
-          const t = new Thread('./services/simulations/monteCarlo.thread.js');
-          const id = Math.random().toString(36).slice(2);
-          const onMsg = (m) => {
-            try {
-              const payload = typeof m === 'string' ? JSON.parse(m) : m;
-              if (payload && payload.id === id) {
-                t.terminate();
-                if (payload.error) return reject(new Error(payload.error));
-                return resolve(payload.result);
-              }
-            } catch (err) {
-              // ignore
-            }
-          };
-          t.onmessage = onMsg;
-          t.postMessage(JSON.stringify({ id, args }));
-        } catch (err) { reject(err); }
-      });
-    }
-  } catch (e) {
-    // threads not available — fall through to fallback
-  }
+const MAX_PATHS = 200000;
+const MAX_STEPS = 2000;
 
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      try {
-        const res = runMonteCarlo(args);
-        resolve(res);
-      } catch (err) {
-        resolve(null);
-      }
-    }, 0);
-  });
-}
+// Work scales linearly with the number of steps, so a 10-year horizon at daily
+// resolution costs 10x a 1-year one. Simulated time is carried by the timestep
+// size instead: the horizon stays exact, only path resolution gets coarser.
+const MAX_SIM_STEPS = 252;
 
-export function runMonteCarlo({ assets = [], N = 1000, steps = 252, correlated = false, covDaily = null, dailyMeans = null, dailyStds = null, sampleCount = 25, seed = null, shrinkageAlpha = 0.1, dist = 'normal', studentDf = 5 }) {
+/**
+ * Build a simulation that can be advanced in batches.
+ *
+ * Splitting "set up" from "run some paths" is what lets the async runner hand
+ * the thread back to the UI between batches without restarting anything.
+ */
+const createSimulation = ({
+  assets = [],
+  N = 1000,
+  steps = 252,
+  correlated = false,
+  covDaily = null,
+  dailyMeans = null,
+  dailyStds = null,
+  sampleCount = 25,
+  seed = null,
+  horizonYears = null,
+  shrinkageAlpha = 0.1,
+  dist = 'normal',
+  studentDf = 5,
+}) => {
   const nAssets = Array.isArray(assets) ? assets.length : 0;
   if (!nAssets) return null;
 
-  // Safety clamps
-  const MAX_PATHS = 200000;
-  const MAX_STEPS = 2000;
-  N = Math.max(0, Math.min(Number(N) || 0, MAX_PATHS));
-  steps = Math.max(1, Math.min(Number(steps) || 1, MAX_STEPS));
+  const pathCount = Math.max(0, Math.min(Number(N) || 0, MAX_PATHS));
+  const requestedSteps = Math.max(1, Math.min(Number(steps) || 1, MAX_STEPS));
 
-  // prepare RNG (function)
+  // Total simulated time. Callers that pass only `steps` are assumed to mean
+  // trading days, which is what this service used to hardcode.
+  const totalYears = Number.isFinite(Number(horizonYears)) && Number(horizonYears) > 0
+    ? Number(horizonYears)
+    : requestedSteps / 252;
+
+  const stepCount = Math.min(requestedSteps, MAX_SIM_STEPS);
+  const dtYears = totalYears / stepCount;
+
   const rng = seed != null ? mulberry32(Number(seed) >>> 0) : Math.random;
+  const nextNormal = createNormalSource(rng);
 
-  // prepare per-asset daily mu and sigma (accept percent or decimal inputs)
-  const muDaily = new Array(nAssets);
-  const sigmaDaily = new Array(nAssets);
+  // Per-asset per-step drift and vol (inputs may be percent or decimal)
+  const muDaily = new Float64Array(nAssets);
+  const sigmaDaily = new Float64Array(nAssets);
+  const quantities = new Float64Array(nAssets);
+  const startPrices = new Float64Array(nAssets);
+
   for (let i = 0; i < nAssets; i++) {
     const a = assets[i] || {};
     if (a.muAnnual !== undefined && a.sigmaAnnual !== undefined) {
       let muAnnualVal = Number(a.muAnnual);
       if (!Number.isFinite(muAnnualVal)) muAnnualVal = 0;
-      if (muAnnualVal > 40 || muAnnualVal < -40) muAnnualVal = Math.max(-40, Math.min(40, muAnnualVal));
+      muAnnualVal = Math.max(-40, Math.min(40, muAnnualVal));
       const muAnnualAdjusted = Math.abs(muAnnualVal) > 1 ? muAnnualVal / 100 : muAnnualVal;
-      muDaily[i] = muAnnualAdjusted / 252; // daily drift
+      muDaily[i] = muAnnualAdjusted * dtYears;
 
       let sigmaAnnualVal = Number(a.sigmaAnnual);
       sigmaAnnualVal = Number.isFinite(sigmaAnnualVal) ? sigmaAnnualVal : 0.01;
       const sigmaAnnualAdjusted = Math.abs(sigmaAnnualVal) > 1 ? sigmaAnnualVal / 100 : sigmaAnnualVal;
-      sigmaDaily[i] = sigmaAnnualAdjusted / Math.sqrt(252);
+      sigmaDaily[i] = sigmaAnnualAdjusted * Math.sqrt(dtYears);
     } else if (dailyMeans && dailyStds) {
-      muDaily[i] = dailyMeans[i] || 0;
-      sigmaDaily[i] = dailyStds[i] || 0;
+      // Supplied per trading day — rescale to this simulation's timestep
+      const stepsPerDay = dtYears * 252;
+      muDaily[i] = (dailyMeans[i] || 0) * stepsPerDay;
+      sigmaDaily[i] = (dailyStds[i] || 0) * Math.sqrt(stepsPerDay);
     } else {
       muDaily[i] = 0;
-      sigmaDaily[i] = 0.01;
+      sigmaDaily[i] = 0.01 * Math.sqrt(dtYears * 252);
     }
+    quantities[i] = Number(assets[i]?.quantity) || 1;
+    startPrices[i] = Number(assets[i]?.S0) || 0;
   }
 
-  // prepare cholesky if correlated and covDaily provided
-  let L = null;
+  // Hoist the deterministic part of the GBM exponent out of the hot loop
+  const driftTerm = new Float64Array(nAssets);
+  for (let i = 0; i < nAssets; i++) {
+    driftTerm[i] = muDaily[i] - 0.5 * sigmaDaily[i] * sigmaDaily[i];
+  }
+
+  // Cholesky factor, flattened to one lower-triangular array: only j <= i is
+  // ever non-zero, so the correlated draw does half the multiplications.
+  let choleskyFlat = null;
   if (correlated && covDaily && covDaily.length === nAssets) {
-    const cov = covDaily.map(row => row.slice());
+    const covScale = dtYears * 252; // daily covariance -> per-step covariance
+    const cov = covDaily.map((row) => row.map((value) => value * covScale));
     for (let i = 0; i < nAssets; i++) {
       if (!Number.isFinite(cov[i][i]) || cov[i][i] <= 0) cov[i][i] = (sigmaDaily[i] || 0.001) ** 2;
     }
@@ -183,120 +230,223 @@ export function runMonteCarlo({ assets = [], N = 1000, steps = 252, correlated =
         }
       }
     }
-    L = cholesky(cov);
+    const L = cholesky(cov);
+    choleskyFlat = new Float64Array((nAssets * (nAssets + 1)) / 2);
+    let k = 0;
+    for (let i = 0; i < nAssets; i++) {
+      for (let j = 0; j <= i; j++) choleskyFlat[k++] = L[i][j];
+    }
   }
 
-  // pick sample indices reproducibly using rng only
   const sampleIdxs = new Set();
-  const desiredSamples = Math.min(sampleCount, N);
-  while (sampleIdxs.size < desiredSamples && N > 0) sampleIdxs.add(Math.floor(rng() * N));
-  const sampleIdxArr = Array.from(sampleIdxs);
-
-  const allFinal = new Array(N);
-  const allMaxDd = new Array(N);
-  const samplePaths = [];
+  const desiredSamples = Math.min(sampleCount, pathCount);
+  while (sampleIdxs.size < desiredSamples && pathCount > 0) {
+    sampleIdxs.add(Math.floor(rng() * pathCount));
+  }
 
   let initial = 0;
-  for (let i = 0; i < nAssets; i++) initial += (Number(assets[i].S0) || 0) * (assets[i].quantity || 1);
+  for (let i = 0; i < nAssets; i++) initial += startPrices[i] * quantities[i];
 
-  for (let p = 0; p < N; p++) {
-    const S = assets.map(a => Number(a.S0) || 0);
-    const series = new Array(steps + 1);
-    series[0] = initial;
+  // Reused across every path — no allocation inside the loop
+  const S = new Float64Array(nAssets);
+  const zRaw = new Float64Array(nAssets);
+  const z = new Float64Array(nAssets);
 
-    for (let t = 1; t <= steps; t++) {
-      let zs = new Array(nAssets).fill(0).map(() => boxMullerWithRng(rng));
-      if (L) zs = matVecMul(L, zs);
+  const allFinal = new Float64Array(pathCount);
+  const allMaxDd = new Float64Array(pathCount);
+  const samplePaths = [];
+
+  let cursor = 0;
+
+  const runPath = (pathIndex) => {
+    for (let i = 0; i < nAssets; i++) S[i] = startPrices[i];
+
+    const keepSeries = sampleIdxs.has(pathIndex);
+    // Only sampled paths need their full series retained (for the chart).
+    const series = keepSeries ? new Array(stepCount + 1) : null;
+    if (series) series[0] = initial;
+
+    let peak = initial;
+    let maxDd = 0;
+    let pv = initial;
+
+    for (let t = 1; t <= stepCount; t++) {
+      for (let i = 0; i < nAssets; i++) zRaw[i] = nextNormal();
+
+      if (choleskyFlat) {
+        let k = 0;
+        for (let i = 0; i < nAssets; i++) {
+          let sum = 0;
+          for (let j = 0; j <= i; j++) sum += choleskyFlat[k++] * zRaw[j];
+          z[i] = sum;
+        }
+      } else {
+        for (let i = 0; i < nAssets; i++) z[i] = zRaw[i];
+      }
 
       if (dist === 'student') {
-        if (L) {
+        if (choleskyFlat) {
           const v = chi2Sample(studentDf, rng);
           const scale = Math.sqrt(studentDf / Math.max(v, 1e-12));
-          for (let k = 0; k < zs.length; k++) zs[k] *= scale;
+          for (let i = 0; i < nAssets; i++) z[i] *= scale;
         } else {
-          for (let k = 0; k < zs.length; k++) {
+          for (let i = 0; i < nAssets; i++) {
             const v = chi2Sample(studentDf, rng);
-            const scale = Math.sqrt(studentDf / Math.max(v, 1e-12));
-            zs[k] *= scale;
+            z[i] *= Math.sqrt(studentDf / Math.max(v, 1e-12));
           }
         }
       }
 
-      let pv = 0;
+      pv = 0;
       for (let i = 0; i < nAssets; i++) {
-        const mu = muDaily[i] || 0;
-        const sigma = sigmaDaily[i] || 0;
-        const z = zs[i];
-        const prev = S[i] || 0;
-        const next = prev * Math.exp((mu - 0.5 * sigma * sigma) + sigma * z);
+        const prev = S[i];
+        const next = prev * Math.exp(driftTerm[i] + sigmaDaily[i] * z[i]);
         S[i] = Number.isFinite(next) ? next : prev;
-        pv += S[i] * (assets[i].quantity || 1);
+        pv += S[i] * quantities[i];
       }
-      series[t] = pv;
-    }
 
-    allFinal[p] = series[steps];
-    allMaxDd[p] = (() => {
-      let peak = -Infinity, maxDd = 0;
-      for (let i = 0; i < series.length; i++) {
-        const v = series[i];
-        if (!Number.isFinite(v)) continue;
-        if (v > peak) peak = v;
-        const dd = peak > 0 ? (peak - v) / peak : 0;
+      // Drawdown tracked as we go, so no per-path value series is needed
+      if (pv > peak) peak = pv;
+      if (peak > 0) {
+        const dd = (peak - pv) / peak;
         if (dd > maxDd) maxDd = dd;
       }
-      return maxDd;
-    })();
 
-    if (sampleIdxs.has(p)) samplePaths.push(series);
-  }
-
-  const finiteFinals = allFinal.filter(v => Number.isFinite(v));
-  const p10 = percentile(finiteFinals, 10);
-  const p50 = percentile(finiteFinals, 50);
-  const p90 = percentile(finiteFinals, 90);
-
-  let cvar95 = null;
-  if (finiteFinals.length) {
-    const s = [...finiteFinals].sort((a, b) => a - b);
-    const cutoff = Math.max(1, Math.floor(0.05 * s.length));
-    const tail = s.slice(0, cutoff);
-    cvar95 = tail.reduce((sum, v) => sum + v, 0) / tail.length;
-  }
-
-  const probLoss = finiteFinals.length ? (finiteFinals.filter(v => v < initial).length / finiteFinals.length) * 100 : 0;
-  const avgMaxDd = allMaxDd.filter(Number.isFinite).length ? (allMaxDd.filter(Number.isFinite).reduce((s, v) => s + v, 0) / allMaxDd.filter(Number.isFinite).length) * 100 : 0;
-
-  const findClosestPath = (target) => {
-    if (!samplePaths.length) return Array(steps + 1).fill(initial);
-    let bestIdx = 0, bestDiff = Infinity;
-    for (let i = 0; i < samplePaths.length; i++) {
-      const v = samplePaths[i][steps];
-      if (!Number.isFinite(v)) continue;
-      const d = Math.abs(v - target);
-      if (d < bestDiff) { bestDiff = d; bestIdx = i; }
+      if (series) series[t] = pv;
     }
-    return samplePaths[bestIdx] || Array(steps + 1).fill(initial);
+
+    allFinal[pathIndex] = pv;
+    allMaxDd[pathIndex] = maxDd;
+    if (series) samplePaths.push(series);
   };
 
-  const pathP10 = findClosestPath(p10);
-  const pathP50 = findClosestPath(p50);
-  const pathP90 = findClosestPath(p90);
-
-  return {
-    finalValues: finiteFinals,
-    p10: Number.isFinite(p10) ? p10 : initial,
-    p50: Number.isFinite(p50) ? p50 : initial,
-    p90: Number.isFinite(p90) ? p90 : initial,
-    cvar95: Number.isFinite(cvar95) ? cvar95 : initial,
-    probLoss: Number.isFinite(probLoss) ? probLoss : 0,
-    avgMaxDd: Number.isFinite(avgMaxDd) ? avgMaxDd : 0,
-    samplePaths,
-    pathP10,
-    pathP50,
-    pathP90,
-    steps,
+  /** Advance the simulation by up to `count` paths. Returns paths completed. */
+  const runBatch = (count) => {
+    const end = Math.min(cursor + count, pathCount);
+    while (cursor < end) {
+      runPath(cursor);
+      cursor += 1;
+    }
+    return cursor;
   };
+
+  const finalize = () => {
+    const finiteFinals = [];
+    for (let i = 0; i < pathCount; i++) {
+      if (Number.isFinite(allFinal[i])) finiteFinals.push(allFinal[i]);
+    }
+
+    const sorted = [...finiteFinals].sort((a, b) => a - b);
+    const p10 = percentile(sorted, 10, true);
+    const p50 = percentile(sorted, 50, true);
+    const p90 = percentile(sorted, 90, true);
+
+    let cvar95 = null;
+    if (sorted.length) {
+      const cutoff = Math.max(1, Math.floor(0.05 * sorted.length));
+      let sum = 0;
+      for (let i = 0; i < cutoff; i++) sum += sorted[i];
+      cvar95 = sum / cutoff;
+    }
+
+    let lossCount = 0;
+    for (let i = 0; i < finiteFinals.length; i++) {
+      if (finiteFinals[i] < initial) lossCount += 1;
+    }
+    const probLoss = finiteFinals.length ? (lossCount / finiteFinals.length) * 100 : 0;
+
+    let ddSum = 0;
+    let ddCount = 0;
+    for (let i = 0; i < pathCount; i++) {
+      if (Number.isFinite(allMaxDd[i])) { ddSum += allMaxDd[i]; ddCount += 1; }
+    }
+    const avgMaxDd = ddCount ? (ddSum / ddCount) * 100 : 0;
+
+    const findClosestPath = (target) => {
+      if (!samplePaths.length) return Array(stepCount + 1).fill(initial);
+      let bestIdx = 0;
+      let bestDiff = Infinity;
+      for (let i = 0; i < samplePaths.length; i++) {
+        const v = samplePaths[i][stepCount];
+        if (!Number.isFinite(v)) continue;
+        const d = Math.abs(v - target);
+        if (d < bestDiff) { bestDiff = d; bestIdx = i; }
+      }
+      return samplePaths[bestIdx] || Array(stepCount + 1).fill(initial);
+    };
+
+    return {
+      finalValues: finiteFinals,
+      p10: Number.isFinite(p10) ? p10 : initial,
+      p50: Number.isFinite(p50) ? p50 : initial,
+      p90: Number.isFinite(p90) ? p90 : initial,
+      cvar95: Number.isFinite(cvar95) ? cvar95 : initial,
+      probLoss: Number.isFinite(probLoss) ? probLoss : 0,
+      avgMaxDd: Number.isFinite(avgMaxDd) ? avgMaxDd : 0,
+      samplePaths,
+      pathP10: findClosestPath(p10),
+      pathP50: findClosestPath(p50),
+      pathP90: findClosestPath(p90),
+      steps: stepCount,
+    };
+  };
+
+  return { runBatch, finalize, pathCount };
+};
+
+/**
+ * Run the whole simulation synchronously.
+ * Blocks the caller for the full duration — prefer runMonteCarloAsync in the UI.
+ */
+export function runMonteCarlo(options) {
+  const sim = createSimulation(options || {});
+  if (!sim) return null;
+  sim.runBatch(sim.pathCount);
+  return sim.finalize();
+}
+
+const nextTick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+/**
+ * Run the simulation in batches, yielding between them so the UI thread stays
+ * responsive. A frame budget rather than a fixed batch size keeps behaviour
+ * sane across devices: slow phones simply do fewer paths per slice.
+ *
+ * @param {Object} args simulation options
+ * @param {Object} [control]
+ * @param {number} [control.sliceMs] work budget per slice (default 12ms)
+ * @param {function} [control.onProgress] called with 0..1 after each slice
+ * @param {{cancelled: boolean}} [control.token] set cancelled to abort
+ */
+export async function runMonteCarloAsync(args, control = {}) {
+  const { sliceMs = 12, onProgress, token } = control;
+
+  const sim = createSimulation(args || {});
+  if (!sim) return null;
+
+  let batchSize = 16;
+  let completed = 0;
+
+  while (completed < sim.pathCount) {
+    if (token?.cancelled) return null;
+
+    const started = Date.now();
+    completed = sim.runBatch(batchSize);
+    const elapsed = Date.now() - started;
+
+    // Re-tune towards the slice budget so one batch never hogs the thread
+    if (elapsed > sliceMs * 1.5 && batchSize > 1) {
+      batchSize = Math.max(1, Math.floor(batchSize / 2));
+    } else if (elapsed < sliceMs * 0.5) {
+      batchSize = Math.min(512, batchSize * 2);
+    }
+
+    if (onProgress) onProgress(completed / sim.pathCount);
+    if (completed < sim.pathCount) await nextTick();
+  }
+
+  if (token?.cancelled) return null;
+  return sim.finalize();
 }
 
 export default runMonteCarlo;

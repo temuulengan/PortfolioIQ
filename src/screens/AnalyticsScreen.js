@@ -18,6 +18,15 @@ import { getPortfolioHistory, generateHistoricalData } from '../../services/hist
 import { CHART_COLORS } from '../../shared/constants';
 import { COLORS, getGainLossColor } from '../../shared/colors';
 
+const chartConfig = {
+  backgroundGradientFrom: '#FFFFFF',
+  backgroundGradientTo: '#FFFFFF',
+  color: (opacity = 1) => `rgba(98, 0, 238, ${opacity})`,
+  strokeWidth: 2,
+  barPercentage: 0.5,
+  useShadowColorFromDataset: false,
+};
+
 const AnalyticsScreen = () => {
   const { holdings, selectedPortfolio } = useContext(PortfolioContext);
   const { user } = useContext(AuthContext);
@@ -131,7 +140,12 @@ const AnalyticsScreen = () => {
     };
   };
 
-  const lineChartData = prepareLineChartData();
+  // Rebuilt only when the underlying series changes, not on every render.
+  const lineChartData = useMemo(
+    () => prepareLineChartData(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [historicalData, loadingHistory, totalValue]
+  );
   // Prepare pie chart data for holdings allocation
   const holdingsPieData = allocations.slice(0, 5).map((item, index) => ({
     name: item.symbol,
@@ -150,14 +164,6 @@ const AnalyticsScreen = () => {
     legendFontSize: 12,
   }));
 
-  const chartConfig = {
-    backgroundGradientFrom: '#FFFFFF',
-    backgroundGradientTo: '#FFFFFF',
-    color: (opacity = 1) => `rgba(98, 0, 238, ${opacity})`,
-    strokeWidth: 2,
-    barPercentage: 0.5,
-    useShadowColorFromDataset: false,
-  };
 
   if (!selectedPortfolio || holdings.length === 0) {
     return (

@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState, useCallback } from 'react';
+import React, { useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -61,6 +61,13 @@ const PortfoliosScreen = ({ navigation }) => {
 
   const { user, loading: authLoading } = useContext(AuthContext);
 
+  // One Firestore query per portfolio runs below; key it on the portfolio ids
+  // so a new array identity for the same portfolios does not refetch them all.
+  const portfolioIdsKey = useMemo(
+    () => (portfolios || []).map((p) => p.id).join('|'),
+    [portfolios]
+  );
+
   useEffect(() => {
     let isMounted = true;
 
@@ -100,7 +107,7 @@ const PortfoliosScreen = ({ navigation }) => {
     return () => {
       isMounted = false;
     };
-  }, [portfolios, user, authLoading]);
+  }, [portfolioIdsKey, user, authLoading]);
 
   useEffect(() => {
     if (!selectedPortfolio?.id) return;

@@ -1,9 +1,14 @@
 // File: src/services/parsePortfolioFile.js
 // Utility: parse CSV / XLSX portfolio files client-side and normalize rows
 
-import Papa from 'papaparse';
-import * as XLSX from 'xlsx';
 import { processInChunks } from '../utils/idleScheduler';
+
+// papaparse and xlsx together are a large chunk of JavaScript that Hermes would
+// otherwise have to initialise during app start, purely because the navigator
+// statically imports the import screen. They are only needed once a user
+// actually picks a file, so they are required at that point instead.
+const loadPapa = () => require('papaparse');
+const loadXLSX = () => require('xlsx');
 
 const headerCandidates = {
   ticker: ['ticker', 'symbol', 'code'],
@@ -67,6 +72,7 @@ export async function parsePortfolioFile(file) {
   try {
     if (name.endsWith('.csv')) {
       // fetch file body then parse in streaming/step mode to avoid blocking the JS thread
+      const Papa = loadPapa();
       const text = await (await fetch(file.uri)).text();
       return await new Promise((resolve) => {
         const dataRows = [];
@@ -101,6 +107,7 @@ export async function parsePortfolioFile(file) {
     }
 
     if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+      const XLSX = loadXLSX();
       const ab = await (await fetch(file.uri)).arrayBuffer();
       const workbook = XLSX.read(new Uint8Array(ab), { type: 'array' });
       const sheetName = workbook.SheetNames[0];

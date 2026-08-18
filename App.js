@@ -15,8 +15,6 @@ import { View } from 'react-native';
 // Ignore VirtualizedList warning
 LogBox.ignoreLogs(['VirtualizedLists should never be nested']);
 
-const MIN_SPLASH_MS = 800; // minimum time to keep the native splash visible
-
 export default function App() {
   const [appIsReady, setAppIsReady] = useState(false);
 
@@ -25,18 +23,10 @@ export default function App() {
 
     async function prepare() {
       try {
-        // Keep splash screen visible while we prepare resources
-        // (fonts, cached data, or initial API calls). Add any async
-        // initialization tasks here.
-        const start = Date.now();
+        // Hold the native splash only for as long as setup actually takes.
+        // A fixed minimum was adding ~0.8s of dead time to every cold start;
+        // auth restore already renders its own spinner behind the navigator.
         await SplashScreen.preventAutoHideAsync();
-
-        // TODO: await real init tasks here (fonts, cached snapshot, auth)
-
-        const elapsed = Date.now() - start;
-        if (elapsed < MIN_SPLASH_MS) {
-          await new Promise((r) => setTimeout(r, MIN_SPLASH_MS - elapsed));
-        }
       } catch (e) {
         console.warn(e);
       } finally {

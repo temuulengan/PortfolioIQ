@@ -2,6 +2,7 @@
 // Reconcile parsed portfolio rows to validated tickers via Yahoo search/validate
 
 import { validateStockSymbol, searchStocks } from '../../services/api/stockAPI';
+import { mapWithConcurrency } from '../../shared/helpers';
 
 // simple levenshtein distance for fuzzy matching
 const levenshtein = (a = '', b = '') => {
@@ -20,48 +21,71 @@ const levenshtein = (a = '', b = '') => {
   return dp[m][n];
 };
 
-export async function reconcilePortfolio(rows, opts = {}) {
-  // rows: [{ ticker, shares, weight, avgCost }]
-  const matched = [];
-  const needsReview = [];
-  const excluded = [];
+const pickBestSuggestion = (suggestions, original) => {
+  let best = null;
+  let bestScore = Infinity;
+  for (const s of suggestions) {
+    const score = Math.min(
+      levenshtein(s.symbol || '', original),
+      levenshtein(s.name || '', original)
+    );
+    if (score < bestScore) { bestScore = score; best = s; }
+  }
+  return best;
+};
 
-  // iterate rows and validate
-  for (const r of rows) {
-    const original = (r.ticker || '').toString().trim();
+/**
+ * Resolve each parsed row to a tradable symbol.
+ *
+ * Every entry carries `rowIndex` — its position in the parsed rows — because
+ * the review UI needs to address the original row, not its position within the
+ * needs-review subset.
+ */
+export async function reconcilePortfolio(rows, opts = {}) {
+  const list = Array.isArray(rows) ? rows : [];
+  const concurrency = opts.concurrency || 6;
+
+  const results = await mapWithConcurrency(list, async (r, rowIndex) => {
+    const original = (r?.ticker || '').toString().trim();
     if (!original) {
-      needsReview.push({ original, reason: 'Empty ticker', row: r });
-      continue;
+      return { rowIndex, original, row: r, reason: 'Empty ticker', status: 'review' };
     }
 
     try {
       const ok = await validateStockSymbol(original);
       if (ok) {
-        matched.push({ original, resolved: original, row: r });
-        continue;
+        return { rowIndex, original, resolved: original, row: r, status: 'matched' };
       }
     } catch (e) {
-      // proceed to search
+      // fall through to fuzzy search
     }
 
-    // Layer 2: fuzzy search via Yahoo search endpoint
-    const suggestions = await searchStocks(original);
-    if (suggestions && suggestions.length) {
-      // pick best by exact symbol/name distance
-      let best = null; let bestScore = Infinity;
-      for (const s of suggestions) {
-        const score = Math.min(levenshtein(s.symbol || '', original), levenshtein(s.name || '', original));
-        if (score < bestScore) { bestScore = score; best = s; }
+    // Layer 2: fuzzy search via the Yahoo search endpoint
+    try {
+      const suggestions = await searchStocks(original);
+      if (suggestions && suggestions.length) {
+        return {
+          rowIndex,
+          original,
+          row: r,
+          suggestion: pickBestSuggestion(suggestions, original),
+          status: 'review',
+        };
       }
-      needsReview.push({ original, suggestion: best, row: r });
-      continue;
+    } catch (e) {
+      // treated as no match below
     }
 
-    // no suggestions — flag for manual review
-    needsReview.push({ original, reason: 'No match found', row: r });
-  }
+    return { rowIndex, original, row: r, reason: 'No match found', status: 'review' };
+  }, concurrency);
 
-  return { matched, needsReview, excluded };
+  return {
+    matched: results.filter((r) => r.status === 'matched'),
+    needsReview: results.filter((r) => r.status === 'review'),
+    excluded: [],
+    // rowIndex -> resolved symbol (null when the row still needs a decision)
+    byRowIndex: Object.fromEntries(results.map((r) => [r.rowIndex, r.resolved || null])),
+  };
 }
 
 export default { reconcilePortfolio };

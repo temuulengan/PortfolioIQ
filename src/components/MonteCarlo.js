@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { View, StyleSheet, Dimensions, TouchableOpacity, ScrollView } from 'react-native';
 import { Card, Text, ActivityIndicator } from 'react-native-paper';
 import Svg, { Polyline, Polygon, Line, Text as SvgText, Circle } from 'react-native-svg';
 import { COLORS } from '../../shared/colors';
 import { runMonteCarloAsync } from '../../services/simulations/monteCarlo';
 import { runBridgewaterAnalysis } from '../../shared/bridgewaterAnalysis';
-import { runWhenIdle } from '../utils/idleScheduler';
+import { runWhenIdle, cancelIdle } from '../utils/idleScheduler';
+import { holdingsSignature } from '../../shared/helpers';
 
 // ─── Layout constants ────────────────────────────────────────────────────────
 const CARD_WIDTH = Dimensions.get('window').width - 32;
@@ -141,6 +142,32 @@ const statStyles = StyleSheet.create({
   value: { fontSize: 13, fontWeight: '700', color: '#111827' },
 });
 
+/**
+ * Annualised drift estimate for one holding.
+ *
+ * The gain since purchase is a *cumulative* return. Feeding it to the simulator
+ * as an annual mean overstates drift for anything held longer than a year (a
+ * position up 60% over five years is ~10%/yr, not 60%/yr), so it is annualised
+ * over the holding period when a purchase date is available.
+ */
+const annualisedDrift = (value, costTotal, purchaseDate) => {
+  if (!(costTotal > 0)) return 8; // no cost basis — fall back to a market-ish default
+
+  const totalReturn = (value - costTotal) / costTotal;
+  if (1 + totalReturn <= 0) return -40;
+
+  let years = 1;
+  const parsed = purchaseDate ? new Date(purchaseDate) : null;
+  if (parsed && !Number.isNaN(parsed.getTime())) {
+    const elapsed = (Date.now() - parsed.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+    // Under a quarter of a year, annualising amplifies noise into absurd drift.
+    years = Math.max(0.25, elapsed);
+  }
+
+  const annual = (Math.pow(1 + totalReturn, 1 / years) - 1) * 100;
+  return Math.max(-40, Math.min(40, annual));
+};
+
 // ─── Main component ───────────────────────────────────────────────────────────
 const MonteCarlo = ({ holdings = [], portfolioValue = 0, horizonYears = 1 }) => {
   const [runKey, setRunKey] = useState(0);
@@ -154,26 +181,37 @@ const MonteCarlo = ({ holdings = [], portfolioValue = 0, horizonYears = 1 }) => 
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  // Both effects below do expensive work (network history downloads, then a
+  // 1000-path simulation). Key them on the positions so a price refresh, which
+  // hands back a brand new holdings array, does not re-run everything.
+  const positionsKey = useMemo(() => holdingsSignature(holdings), [holdings]);
+  const holdingsRef = useRef(holdings);
+  useEffect(() => { holdingsRef.current = holdings; }, [holdings]);
+
   // ── Bridgewater analysis ──────────────────────────────────────────────────
-  React.useEffect(() => {
+  useEffect(() => {
     let mounted = true;
-    if (!holdings || holdings.length < 2) { setBwResults(null); return () => { mounted = false; }; }
+    if (!holdings || holdings.length < 2) { setBwResults(null); return undefined; }
     // Run Bridgewater analysis when idle to avoid blocking UI on mount/tab switch
     const job = runWhenIdle(async () => {
       try {
-        const res = await runBridgewaterAnalysis(holdings, { lookbackDays: 252 });
+        const res = await runBridgewaterAnalysis(holdingsRef.current, { lookbackDays: 252 });
         if (mounted && res?.success) setBwResults(res);
       } catch (e) {
         if (mounted) setBwResults(null);
       }
     });
-    return () => { mounted = false; };
-  }, [holdings]);
+    return () => {
+      mounted = false;
+      cancelIdle(job);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [positionsKey]);
 
   // ── Simulation ────────────────────────────────────────────────────────────
-  React.useEffect(() => {
+  useEffect(() => {
     let mounted = true;
-    if (!holdings.length || portfolioValue <= 0) { setResults(null); setLoading(false); return () => { mounted = false; }; }
+    if (!holdings.length || portfolioValue <= 0) { setResults(null); setLoading(false); return undefined; }
 
     const assets = holdings.map((h, i) => {
       const quantity = Number(h.quantity) || 0;
@@ -181,8 +219,7 @@ const MonteCarlo = ({ holdings = [], portfolioValue = 0, horizonYears = 1 }) => 
       const value = quantity * currentPrice;
       const cost = Number(h.costBasis ?? h.purchasePrice ?? h.purchaseUnitPrice) || 0;
       const costTotal = quantity * (cost || 0);
-      const rawMu = costTotal > 0 ? ((value - costTotal) / costTotal) * 100 : 8;
-      const muAnnual = Math.max(-40, Math.min(40, rawMu));
+      const muAnnual = annualisedDrift(value, costTotal, h.purchaseDate);
       const sigmaAnnual = bwResults?.assets?.[i]
         ? bwResults.assets[i].annualVolatility * 100
         : 25;
@@ -217,8 +254,13 @@ const MonteCarlo = ({ holdings = [], portfolioValue = 0, horizonYears = 1 }) => 
       }
     });
 
-    return () => { mounted = false; cancelled = true; };
-  }, [holdings, portfolioValue, horizon, runKey, bwResults, correlated, Npaths, dist]);
+    return () => {
+      mounted = false;
+      cancelled = true;
+      cancelIdle(job);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [positionsKey, portfolioValue, horizon, runKey, bwResults, correlated, Npaths, dist]);
 
   // ── Loading state ─────────────────────────────────────────────────────────
   if (!results && loading) {

@@ -10,15 +10,17 @@ import useFileUploadPipeline from '../hooks/useFileUploadPipeline';
 
 import { runBridgewaterAnalysis } from '../../shared/bridgewaterAnalysis';
 import { runMonteCarloAsync } from '../../services/simulations/monteCarlo';
-import { addHolding } from '../../services/firebase/firebase';
+import { addHoldingsBatch } from '../../services/firebase/firebase';
 import { useContext } from 'react';
 import { PortfolioContext } from '../context/PortfolioContext';
+import { AuthContext } from '../context/AuthContext';
 import { COLORS } from '../../shared/colors';
 
 const FileUploadScreen = () => {
   const navigation = useNavigation();
   const { file, selectFile, parse, parsedRows, parseErrors, reconcile, report, resolveAndRun, resolvedHoldings, loading } = useFileUploadPipeline();
   const { selectPortfolio, createNewPortfolio, loadPortfolios, loadHoldings } = useContext(PortfolioContext);
+  const { user } = useContext(AuthContext);
   const [overrides, setOverrides] = useState({});
   const [excluded, setExcluded] = useState([]);
   const [step, setStep] = useState(1); // 1=upload,2=review,3=complete
@@ -31,9 +33,9 @@ const FileUploadScreen = () => {
   const doParse = async () => {
     setLoadingMessage('Parsing file...');
     try {
-      await parse();
+      const { rows } = await parse();
       setLoadingMessage('Reconciling holdings...');
-      await reconcile();
+      await reconcile(rows);
       // advance to review step
       setPortfolioName((file && file.name) ? file.name.replace(/\.[^/.]+$/, '') : `Imported ${new Date().toISOString()}`);
       setStep(2);
@@ -68,21 +70,27 @@ const FileUploadScreen = () => {
       const res = await createNewPortfolio(portfolioData);
       if (res && res.success) {
         createdPortfolio = res.portfolio;
-        // add holdings
-        await Promise.all(final.map(async (h) => {
-          try {
-            await addHolding(createdPortfolio.id, {
-                symbol: h.symbol,
-                quantity: h.quantity || 0,
-                currentPrice: h.currentPrice || 0,
-                purchasePrice: h.avgCost ?? h.purchasePrice ?? null,
-                raw: h.raw || null,
-                lastUpdated: new Date().toISOString(),
-              });
-          } catch (err) {
-            console.error('Failed to add holding during import for', h.symbol, err.message || err);
-          }
-        }));
+        // Import as one batched write rather than N independent round trips
+        const importedAt = new Date().toISOString();
+        try {
+          await addHoldingsBatch(
+            createdPortfolio.id,
+            final.map((h) => ({
+              symbol: h.symbol,
+              name: h.name || null,
+              quantity: h.quantity || 0,
+              currentPrice: h.currentPrice || 0,
+              purchasePrice: h.avgCost ?? h.purchasePrice ?? null,
+              assetType: 'stock',
+              raw: h.raw || null,
+              lastUpdated: importedAt,
+            })),
+            user?.uid
+          );
+        } catch (err) {
+          console.error('Failed to import holdings:', err.message || err);
+          throw err;
+        }
 
         // refresh portfolios and select the new portfolio so Dashboard/Portfolios reflect it
         try {

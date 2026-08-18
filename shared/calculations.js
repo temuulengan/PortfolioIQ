@@ -141,6 +141,48 @@ export const calculateSectorAllocation = (holdings) => {
   return Object.values(sectorGroups).map(g => ({ ...g, allocationPercent: (!Number.isFinite(totalValue) || totalValue === 0) ? 0 : (g.value / totalValue) * 100 }));
 };
 
+// ==================== HISTORY ====================
+
+/**
+ * Combine per-symbol price series into one portfolio value series.
+ *
+ * Series are joined on their dates, never on array position: symbols on
+ * different exchanges, or listed more recently, come back with different
+ * numbers of bars, so index i is not the same day for every holding. Only dates
+ * present in every series are used, and non-finite prices are dropped.
+ *
+ * @param {Array<{quantity: number, dates: string[], prices: number[]}>} series
+ * @returns {Array<{date: Date, totalValue: number}>} ascending by date
+ */
+export const mergePortfolioHistory = (series) => {
+  if (!Array.isArray(series) || series.length === 0) return [];
+
+  const byHolding = series.map((entry) => {
+    const byDate = new Map();
+    const dates = entry?.dates || [];
+    const prices = entry?.prices || [];
+    dates.forEach((date, index) => {
+      const price = prices[index];
+      if (!date || !Number.isFinite(price) || price <= 0) return;
+      byDate.set(String(date).slice(0, 10), price);
+    });
+    return { quantity: toNumber(entry?.quantity), byDate };
+  });
+
+  const [first, ...rest] = byHolding;
+  const commonDates = [...first.byDate.keys()]
+    .filter((date) => rest.every((holding) => holding.byDate.has(date)))
+    .sort();
+
+  return commonDates.map((date) => ({
+    date: new Date(date),
+    totalValue: byHolding.reduce(
+      (sum, holding) => sum + holding.quantity * holding.byDate.get(date),
+      0
+    ),
+  }));
+};
+
 // ==================== PERFORMANCE CALCULATIONS ====================
 
 export const calculateAnnualizedReturn = (startValue, endValue, years) => {

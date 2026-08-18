@@ -19,7 +19,6 @@ const PortfolioFileUpload = ({ onFileSelected }) => {
         throw new Error('expo-document-picker not available');
       }
       const res = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
-      console.log('DocumentPicker result', res);
 
       // Support both older { type: 'success', name, uri } and newer { assets: [...] } shapes
       let picked = null;

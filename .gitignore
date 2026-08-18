@@ -66,3 +66,7 @@ yarn-error.log*
 # Ensure any dotenv files are ignored
 .env
 .env.*
+
+# Cloud Functions
+functions/node_modules/
+.firebase/

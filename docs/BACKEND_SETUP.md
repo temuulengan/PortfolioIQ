@@ -2,10 +2,16 @@
 
 ### Environment Variables
 
-Firebase config and API keys are loaded from a `.env` file via `react-native-dotenv`. This file is already in `.gitignore` — never commit it.
+Firebase **client** config is loaded from a `.env` file via `react-native-dotenv`.
+This file is gitignored — never commit it. Copy `.env.example` to get started.
 
 ```
-GROQ_API_KEY=your_key_here
+FIREBASE_API_KEY=...
+FIREBASE_AUTH_DOMAIN=...
+FIREBASE_PROJECT_ID=...
+FIREBASE_STORAGE_BUCKET=...
+FIREBASE_MESSAGING_SENDER_ID=...
+FIREBASE_APP_ID=...
 ```
 
 Restart Expo after any `.env` change:
@@ -14,98 +20,67 @@ Restart Expo after any `.env` change:
 npx expo start --clear
 ```
 
----
+> **EAS builds do not see `.env`.** Because the file is gitignored, EAS never
+> uploads it and every value arrives `undefined`. `services/firebase/firebase-config.js`
+> now fails loudly instead of booting into opaque Firebase errors. Set the same
+> keys as EAS environment variables before building:
+>
+> ```bash
+> eas env:create --name FIREBASE_API_KEY --value "..." --environment production
+> ```
+>
+> See https://docs.expo.dev/eas/environment-variables/
 
-### Groq API
-
-Free key available at [console.groq.com](https://console.groq.com) — no credit card needed. Free tier covers 14,400 requests/day. The app uses LLaMA 3.1 70B for portfolio analysis and 8B for metric explanations.
-
----
-
-### Firestore Index
-
-The `portfolio_history` collection requires a composite index. Create it in Firebase Console under Firestore → Indexes:
-
-- Collection: `portfolio_history`
-- Field 1: `portfolioId` (Ascending)
-- Field 2: `date` (Descending)
-
-Takes a few minutes to build after creation.
+Secrets that are **not** app variables (anything that must not be extractable
+from a shipped binary) belong in Cloud Functions — see below.
 
 ---
 
-### Firestore Structure
+### AI features (Cloud Functions)
 
-```
-users/{userId}
-portfolios/{portfolioId}
-holdings/{holdingId}
-portfolio_history/{snapshotId}
-```
+The Groq API key is held server-side. Model calls go through authenticated
+callable functions in `functions/`, so the key never enters the app bundle.
 
----
+```bash
+cd functions && npm install && cd ..
 
-### Dependencies
+# Store the key as a Firebase secret (free key at https://console.groq.com)
+firebase functions:secrets:set GROQ_API_KEY
 
-```
-groq-sdk, date-fns, react-native-dotenv
+firebase deploy --only functions
 ```
 
----
-
-### New Files
-
-| File | Description |
-|---|---|
-| `.env` | Environment variables — do not commit |
-| `src/services/aiService.js` | Groq AI integration |
-| `src/services/historyService.js` | Portfolio history tracking |
-| `src/components/AIInsights.js` | AI insights UI component |
+Exposed callables: `generatePortfolioInsights`, `getRebalancingRecommendations`,
+`explainRiskMetrics`. All three reject unauthenticated callers. Until they are
+deployed, the app shows "AI features are not deployed yet" rather than failing
+silently. The model used is `llama-3.3-70b-versatile`.
 
 ---
 
-### Modified Files
+### Firestore rules and indexes
 
-| File | Change |
-|---|---|
-| `babel.config.js` | Added react-native-dotenv plugin |
-| `src/config/firebase-config.js` | Uses `@env` imports |
-| `src/utils/helpers.js` | Date handling via date-fns |
-| `src/screens/AnalyticsScreen.js` | Real historical data |
-| `src/screens/DashboardScreen.js` | Added AI Insights component |
+Rules and indexes are version-controlled in `firestore.rules` and
+`firestore.indexes.json`. The app's `where('userId', '==', uid)` filters only
+shape queries — the rules are what actually enforce per-user isolation, so they
+must be deployed before the app is used with real accounts.
 
----
-
-### Firebase Security Rules
-
-```javascript
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-    match /portfolios/{portfolioId} {
-      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
-    }
-    match /holdings/{holdingId} {
-      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
-    }
-    match /portfolio_history/{snapshotId} {
-      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
-    }
-  }
-}
+```bash
+firebase deploy --only firestore:rules,firestore:indexes
 ```
 
+The indexes cover:
+
+| Collection | Fields |
+| --- | --- |
+| `portfolios` | `userId` ASC, `createdAt` DESC |
+| `transactions` | `portfolioId` ASC, `userId` ASC, `createdAt` DESC |
+| `portfolio_history` | `userId` ASC, `portfolioId` ASC, `date` ASC |
+| `holdings` | `portfolioId` ASC, `userId` ASC, `archived` ASC |
+
 ---
 
-### Troubleshooting
+### Maintenance scripts
 
-**AI Insights not loading** — verify `GROQ_API_KEY` is set in `.env` and Expo was restarted with `--clear`. Check the key is active at console.groq.com.
-
-**Firestore permission errors** — the `portfolio_history` index is likely still building. Wait 5–10 minutes and retry.
-
-**Historical data not appearing** — at least one holding must exist. `generateHistoricalData()` fetches from Yahoo Finance on first load, which may take a few seconds on a slow connection. Check console logs for specific errors.
-
-**Date formatting errors** — confirm date-fns is installed (`npm list date-fns`) and that Firebase Timestamps are being handled correctly in `helpers.js`.
+`scripts/` contains Node utilities that talk to Firestore through
+`firebase-admin` (a **dev** dependency — it must never be bundled into the app).
+They need a service-account key; run them from a trusted machine only.

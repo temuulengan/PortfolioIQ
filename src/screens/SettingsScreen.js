@@ -15,13 +15,15 @@ import {
 } from 'react-native-paper';
 import { COLORS } from '../../shared/colors';
 import { AuthContext } from '../context/AuthContext';
+import { PortfolioContext } from '../context/PortfolioContext';
 import { Switch, Button, Dialog, Portal, TextInput, IconButton } from 'react-native-paper';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getUserProfile, updateUserProfile, updateAuthProfile, deleteUserAccount } from '../services/firebase';
+import { getUserProfile, updateUserProfile, updateAuthProfile, deleteUserAccount } from '../../services/firebase/firebase';
 
 const SettingsScreen = () => {
   const { user, logout, resetPassword } = useContext(AuthContext);
+  const { applyPriceRefreshInterval } = useContext(PortfolioContext);
   const [profile, setProfile] = useState(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [displayName, setDisplayName] = useState('');
@@ -38,6 +40,10 @@ const SettingsScreen = () => {
   const [notifEnabled, setNotifEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleting, setDeleting] = useState(false);
+
   useEffect(() => {
     const load = async () => {
       if (!user) return setLoadingProfile(false);
@@ -48,7 +54,9 @@ const SettingsScreen = () => {
         setNotifEnabled(p?.notificationsEnabled !== false);
         setEditName(p?.displayName || user.displayName || '');
         setDisplayName(p?.displayName || user.displayName || '');
-        setRefreshInterval(p?.priceRefreshInterval || 15);
+        const storedInterval = p?.priceRefreshInterval ?? 15;
+        setRefreshInterval(storedInterval);
+        applyPriceRefreshInterval(storedInterval);
       } catch (err) {
         console.error('Error loading profile in Settings:', err);
       } finally {
@@ -56,7 +64,7 @@ const SettingsScreen = () => {
       }
     };
     load();
-  }, [user]);
+  }, [user, applyPriceRefreshInterval]);
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -188,6 +196,9 @@ const SettingsScreen = () => {
                       await updateUserProfile(user.uid, { priceRefreshInterval: opt.value });
                       setRefreshInterval(opt.value);
                       await AsyncStorage.setItem('priceRefreshInterval', String(opt.value));
+                      // Push it to the provider so the background refresher
+                      // actually picks up the new cadence.
+                      applyPriceRefreshInterval(opt.value);
                     } catch (err) {
                       console.error('Error saving refresh interval:', err);
                       Alert.alert('Error', 'Unable to save refresh interval');
@@ -285,6 +296,55 @@ const SettingsScreen = () => {
             <Button onPress={() => setShowCurrencyDialog(false)}>Close</Button>
           </Dialog.Actions>
         </Dialog>
+
+        <Dialog visible={showDeleteDialog} onDismiss={() => setShowDeleteDialog(false)}>
+          <Dialog.Title>Delete Account</Dialog.Title>
+          <Dialog.Content>
+            <Text style={{ marginBottom: 12 }}>
+              This permanently deletes your account, portfolios, holdings and transactions.
+              This cannot be undone.
+            </Text>
+            <Text style={{ marginBottom: 12, color: COLORS.textSecondary }}>
+              Firebase requires a recent sign-in before deleting an account, so please
+              confirm your password.
+            </Text>
+            <TextInput
+              label="Password"
+              value={deletePassword}
+              onChangeText={setDeletePassword}
+              secureTextEntry
+              autoCapitalize="none"
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button disabled={deleting} onPress={() => setShowDeleteDialog(false)}>Cancel</Button>
+            <Button
+              disabled={deleting || !deletePassword}
+              loading={deleting}
+              textColor={COLORS.critical}
+              onPress={async () => {
+                try {
+                  setDeleting(true);
+                  await deleteUserAccount(deletePassword);
+                  setShowDeleteDialog(false);
+                  // Auth state change unmounts this screen; no logout call needed.
+                } catch (err) {
+                  console.error('Error deleting account:', err);
+                  const message =
+                    err?.code === 'auth/wrong-password' || err?.code === 'auth/invalid-credential'
+                      ? 'That password is incorrect.'
+                      : err?.message || 'Unable to delete account';
+                  Alert.alert('Error', message);
+                } finally {
+                  setDeleting(false);
+                  setDeletePassword('');
+                }
+              }}
+            >
+              Delete Forever
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
       </Portal>
 
       {!loadingProfile && (
@@ -317,18 +377,8 @@ const SettingsScreen = () => {
               titleStyle={{ color: COLORS.critical }}
               left={(props) => <List.Icon {...props} icon="account-remove" color={COLORS.critical} />}
               onPress={() => {
-                Alert.alert('Delete Account', 'Are you sure? This will permanently delete your account and all data.', [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Continue', style: 'destructive', onPress: async () => {
-                    try {
-                      await deleteUserAccount(user?.uid);
-                      await logout();
-                    } catch (err) {
-                      console.error('Error deleting account:', err);
-                      Alert.alert('Error', 'Unable to delete account');
-                    }
-                  } }
-                ]);
+                setDeletePassword('');
+                setShowDeleteDialog(true);
               }}
             />
           </List.Section>

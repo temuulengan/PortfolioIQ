@@ -1,4 +1,4 @@
-import React, { useContext, useState, useRef } from 'react';
+import React, { useContext, useState, useRef, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -52,6 +52,22 @@ const HoldingsScreen = ({ navigation }) => {
   // Quick-delete with Undo: archive immediately, schedule permanent delete
   const pendingDeletesRef = useRef({});
   const [snackbar, setSnackbar] = useState({ visible: false, message: '', holdingId: null });
+
+  // Leaving the screen ends the undo window. Flush the pending deletes now
+  // instead of abandoning their timers — otherwise the holdings stay archived
+  // (invisible but never removed) until the next portfolio-load sweep.
+  useEffect(() => {
+    const pending = pendingDeletesRef.current;
+    return () => {
+      Object.entries(pending).forEach(([holdingId, timeoutId]) => {
+        clearTimeout(timeoutId);
+        deleteExistingHolding(holdingId).catch((err) =>
+          console.error('Flushing pending delete failed:', err)
+        );
+        delete pending[holdingId];
+      });
+    };
+  }, [deleteExistingHolding]);
 
   const handleDeleteHolding = async (holdingId, symbol, name) => {
     try {

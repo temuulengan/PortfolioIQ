@@ -2,12 +2,14 @@
  * AI-powered portfolio insights component using Groq LLaMA 3.1
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Card, Text, ActivityIndicator, Button, Chip } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
 import { generatePortfolioInsights, getRebalancingRecommendations } from '../../services/ai/aiService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { holdingsSignature } from '../../shared/helpers';
 import { COLORS } from '../../shared/colors';
 import {
   calculateVolatility,
@@ -151,6 +153,32 @@ const SemiGauge = ({ value }) => {
   );
 };
 
+const INSIGHTS_CACHE_KEY = '@portfolioiq_ai_insights';
+const INSIGHTS_TTL_MS = 12 * 60 * 60 * 1000; // insights age slowly; don't re-bill on every visit
+
+const readCachedInsights = async (signature) => {
+  try {
+    const raw = await AsyncStorage.getItem(`${INSIGHTS_CACHE_KEY}:${signature}`);
+    if (!raw) return null;
+    const { insights, timestamp } = JSON.parse(raw);
+    if (!insights || Date.now() - timestamp > INSIGHTS_TTL_MS) return null;
+    return insights;
+  } catch (err) {
+    return null;
+  }
+};
+
+const writeCachedInsights = async (signature, insights) => {
+  try {
+    await AsyncStorage.setItem(
+      `${INSIGHTS_CACHE_KEY}:${signature}`,
+      JSON.stringify({ insights, timestamp: Date.now() })
+    );
+  } catch (err) {
+    // caching is best-effort
+  }
+};
+
 const AIInsights = ({ holdings, portfolioValue, totalGainLoss }) => {
   const [insights, setInsights] = useState(null);
   const [recommendations, setRecommendations] = useState('');
@@ -158,15 +186,31 @@ const AIInsights = ({ holdings, portfolioValue, totalGainLoss }) => {
   const [error, setError] = useState(null);
   const [showRecommendations, setShowRecommendations] = useState(false);
 
-  const loadInsights = async () => {
+  // Each generation is a billed model call, so key the work on the actual
+  // positions rather than on the holdings array identity (which changes on
+  // every price refresh) or on holdings.length (which misses swaps entirely).
+  const positionsKey = useMemo(() => holdingsSignature(holdings), [holdings]);
+  const inFlightRef = useRef(false);
+
+  const loadInsights = async ({ force = false } = {}) => {
     if (holdings.length === 0) {
       setError('Add holdings to your portfolio to get AI insights');
       return;
     }
+    if (inFlightRef.current) return;
 
     try {
+      inFlightRef.current = true;
       setLoading(true);
       setError(null);
+
+      if (!force) {
+        const cached = await readCachedInsights(positionsKey);
+        if (cached) {
+          setInsights(cached);
+          return;
+        }
+      }
 
       // Prepare portfolio data object
       const portfolioData = {
@@ -182,16 +226,14 @@ const AIInsights = ({ holdings, portfolioValue, totalGainLoss }) => {
 
       // Generate portfolio insights
       const insightsData = await generatePortfolioInsights(portfolioData);
-      
+
       setInsights(insightsData);
+      await writeCachedInsights(positionsKey, insightsData);
     } catch (err) {
       console.error('AI Insights error:', err);
-      if (err.message.includes('GROQ_API_KEY')) {
-        setError('Groq API key not configured. Get your free key at console.groq.com');
-      } else {
-        setError(err.message || 'Failed to generate AI insights');
-      }
+      setError(err?.message || 'Failed to generate AI insights');
     } finally {
+      inFlightRef.current = false;
       setLoading(false);
     }
   };
@@ -211,15 +253,15 @@ const AIInsights = ({ holdings, portfolioValue, totalGainLoss }) => {
   };
 
   useEffect(() => {
-    if (holdings.length > 0) {
-      loadInsights();
-    }
-  }, [holdings.length]);
+    if (positionsKey) loadInsights();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [positionsKey]);
 
   useEffect(() => {
     if (showRecommendations && holdings.length > 0 && !recommendations) {
       loadRecommendations();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showRecommendations]);
 
   const gainLossPercent = portfolioValue > 0 ? (totalGainLoss / portfolioValue) * 100 : 0;

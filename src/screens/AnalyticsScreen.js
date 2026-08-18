@@ -1,12 +1,11 @@
-import React, { useContext, useState, useEffect, useMemo } from 'react';
-import { runWhenIdle } from '../utils/idleScheduler';
+import React, { useContext, useState, useEffect, useMemo, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Dimensions, InteractionManager } from 'react-native';
 import { Text, Card, Title, Chip, Surface, SegmentedButtons, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LineChart, PieChart } from 'react-native-chart-kit';
 import { PortfolioContext } from '../context/PortfolioContext';
 import { AuthContext } from '../context/AuthContext';
-import { formatCurrency, formatPercent } from '../../shared/helpers';
+import { formatCurrency, formatPercent, holdingsSignature } from '../../shared/helpers';
 import {
   calculatePortfolioValue,
   calculateAllocation,
@@ -29,6 +28,12 @@ const AnalyticsScreen = () => {
 
   const screenWidth = Dimensions.get('window').width;
 
+  // generateHistoricalData issues one Yahoo request per symbol; keying the effect
+  // on the positions stops it firing again on every price refresh.
+  const positionsKey = useMemo(() => holdingsSignature(holdings), [holdings]);
+  const holdingsRef = useRef(holdings);
+  useEffect(() => { holdingsRef.current = holdings; }, [holdings]);
+
   const totalValue = useMemo(() => calculatePortfolioValue(holdings), [holdings]);
   const allocations = useMemo(() => calculateAllocation(holdings), [holdings]);
   const assetTypeAllocations = useMemo(() => calculateAssetTypeAllocation(holdings), [holdings]);
@@ -37,8 +42,10 @@ const AnalyticsScreen = () => {
 
   // Load historical data when portfolio or time range changes
   useEffect(() => {
-    if (!selectedPortfolio) return;
-    
+    if (!selectedPortfolio) return undefined;
+
+    let cancelled = false;
+
     const loadHistoricalData = async () => {
       try {
         setLoadingHistory(true);
@@ -56,25 +63,31 @@ const AnalyticsScreen = () => {
         
         // Try to get existing historical data
         let history = await getPortfolioHistory(selectedPortfolio.id, days);
-        
+
         // If no history exists, generate from current holdings
-        if (history.length === 0 && holdings && holdings.length > 0) {
-          history = await generateHistoricalData(holdings, days);
+        const current = holdingsRef.current;
+        if (history.length === 0 && current && current.length > 0) {
+          history = await generateHistoricalData(current, days);
         }
-        
-        setHistoricalData(history);
+
+        if (!cancelled) setHistoricalData(history);
       } catch (error) {
         console.error('Error loading historical data:', error);
-        setHistoryError(error.message);
+        if (!cancelled) setHistoryError(error.message);
       } finally {
-        setLoadingHistory(false);
+        if (!cancelled) setLoadingHistory(false);
       }
     };
-    
-    InteractionManager.runAfterInteractions(() => {
+
+    const task = InteractionManager.runAfterInteractions(() => {
       loadHistoricalData();
     });
-  }, [selectedPortfolio, timeRange, holdings]);
+
+    return () => {
+      cancelled = true;
+      task?.cancel?.();
+    };
+  }, [selectedPortfolio?.id, timeRange, positionsKey]);
 
   // Prepare line chart data from historical data
   const prepareLineChartData = () => {

@@ -21,17 +21,22 @@ const ReconciliationPanel = ({ report, onResolveRow, onExcludeRow, onRun, initia
       <Text style={[styles.title, { color: COLORS.primary }]}>Reconciliation</Text>
       <Text style={{ color: COLORS.textSecondary }}>{(report?.matched?.length || 0)} matched — {(report?.needsReview?.length || 0)} need review</Text>
 
-      {(report?.needsReview || []).map((item, idx) => (
-        <View key={idx} style={styles.row}>
+      {(report?.needsReview || []).map((item, idx) => {
+        // Overrides and exclusions are keyed by the row's index in the parsed
+        // file — using the needs-review position applies them to the wrong row.
+        const rowIndex = item.rowIndex ?? idx;
+        return (
+        <View key={rowIndex} style={styles.row}>
           <List.Item title={item.original || '(empty)'} description={item.suggestion ? `${item.suggestion.symbol} — ${item.suggestion.name}` : item.reason || ''} />
           <View style={styles.controls}>
-            <TextInput placeholder="Override symbol" value={overrides[idx] || ''} onChangeText={(v) => handleChange(idx, v)} style={{ width: 160 }} />
-            <Button mode="outlined" onPress={() => onResolveRow && onResolveRow(idx, overrides[idx] || item.suggestion?.symbol)} disabled={!overrides[idx] && !item.suggestion} style={{ borderColor: COLORS.primary, color: COLORS.primary }}>Apply</Button>
-            <Button mode="text" onPress={() => onExcludeRow && onExcludeRow(idx)} style={{ marginLeft: 8, color: COLORS.primary }}>Exclude</Button>
+            <TextInput placeholder="Override symbol" value={overrides[rowIndex] || ''} onChangeText={(v) => handleChange(rowIndex, v)} style={{ width: 160 }} />
+            <Button mode="outlined" onPress={() => onResolveRow && onResolveRow(rowIndex, overrides[rowIndex] || item.suggestion?.symbol)} disabled={!overrides[rowIndex] && !item.suggestion} style={{ borderColor: COLORS.primary, color: COLORS.primary }}>Apply</Button>
+            <Button mode="text" onPress={() => onExcludeRow && onExcludeRow(rowIndex)} style={{ marginLeft: 8, color: COLORS.primary }}>Exclude</Button>
           </View>
           <Divider style={{ backgroundColor: COLORS.border }} />
         </View>
-      ))}
+        );
+      })}
 
       <View style={{ marginTop: 12 }}>
         <Button mode="contained" onPress={onRun} disabled={!allResolved} style={{ backgroundColor: COLORS.primary }} labelStyle={{ color: COLORS.textWhite }}>Run Analysis</Button>

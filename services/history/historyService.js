@@ -11,7 +11,7 @@ import {
 } from 'firebase/firestore';
 import { db, getCurrentUser } from '../firebase/firebase';
 import { getHistoricalPrices } from '../api/stockAPI';
-import { calculatePortfolioValue } from '../../shared/calculations';
+import { calculatePortfolioValue, mergePortfolioHistory } from '../../shared/calculations';
 
 /**
  * Create a daily snapshot of portfolio value
@@ -19,9 +19,13 @@ import { calculatePortfolioValue } from '../../shared/calculations';
  */
 export const createPortfolioSnapshot = async (portfolioId, holdings) => {
   try {
+    const user = getCurrentUser();
+    if (!user) throw new Error('User not authenticated');
+
     const totalValue = calculatePortfolioValue(holdings);
     
     const snapshot = {
+      userId: user.uid,
       portfolioId,
       date: Timestamp.now(),
       totalValue,
@@ -115,29 +119,18 @@ export const generateHistoricalData = async (holdings, days = 30) => {
       return [];
     }
 
-    // Find common dates across all holdings
-    const dates = allPriceData[0].data.dates;
-
-    // Calculate portfolio value for each date
-    dates.forEach((date, index) => {
-      let totalValue = 0;
-      let hasAllPrices = true;
-
-      allPriceData.forEach(holding => {
-        if (holding.data.prices[index] !== undefined) {
-          totalValue += holding.quantity * holding.data.prices[index];
-        } else {
-          hasAllPrices = false;
-        }
-      });
-
-      if (hasAllPrices) {
-        historicalData.push({
-          date: new Date(date),
-          totalValue,
-        });
-      }
-    });
+    // Align by date, not by array position — see mergePortfolioHistory.
+    // Note: this values today's positions at historical prices; it is a "what
+    // would this basket have been worth" curve, not a record of trades.
+    historicalData.push(
+      ...mergePortfolioHistory(
+        allPriceData.map(({ quantity, data }) => ({
+          quantity,
+          dates: data.dates,
+          prices: data.prices,
+        }))
+      )
+    );
 
     return historicalData;
   } catch (error) {

@@ -1,12 +1,12 @@
-# PortfolioIQ 📊
+# PortfolioIQ 
 
-**Investment Portfolio Tracking Application**
+Investment Portfolio tracking and analysis app (in active development).
 
-A React Native mobile application for tracking and analyzing investment portfolios. Built with Expo and Firebase, with added local simulation and risk-analysis tools.
+This Expo React Native project provides multi-portfolio management, realtime price enrichment, and built-in risk & simulation tools. The codebase is under active development — features, performance improvements, and integration work are ongoing.
 
 ---
 
-## 📋 Project Overview
+## Project Overview
 
 PortfolioIQ is a full-featured investment portfolio management app that allows users to:
 
@@ -19,9 +19,9 @@ PortfolioIQ is a full-featured investment portfolio management app that allows u
 
 ---
 
-## ✨ Features
+## Features
 
-### 📱 Core Features
+### Core Features
 - **Multi-Portfolio Management** - Create and switch between different portfolios
 - **Holdings Tracking** - Add, edit, and delete stock holdings with purchase details
 - **Real-Time Price Updates** - Automatic price refreshes from Yahoo Finance
@@ -29,32 +29,31 @@ PortfolioIQ is a full-featured investment portfolio management app that allows u
 - **Search & Filter** - Find stocks with autocomplete search
 - **Sorting Options** - Sort holdings by symbol, price, quantity, etc.
 
-### 📊 Analytics & Simulation Features
-- **Portfolio Growth Charts** - Visualize portfolio performance over time
-- **Allocation Analysis** - Pie charts showing holdings and asset type distribution
-- **Top/Bottom Performers** - Identify best and worst performing stocks
-- **Gain/Loss Tracking** - Monitor returns at individual and portfolio levels
-- **Monte Carlo Simulation** - Simulate portfolio outcomes (GBM) with P10/P50/P90 summaries and drawdown estimates
-- **Bridgewater-style Analysis** - Covariance and risk-parity insights used to produce correlated Monte Carlo simulations
+### Analytics & Simulation Features
+- Portfolio Growth Charts — visualize performance over time
+- Allocation Analysis — pie charts for holdings and asset-type distribution
+- Top/Bottom Performers — identify best and worst performing positions
+- Gain/Loss Tracking — track returns at holding and portfolio level
+- Monte Carlo Simulation — configurable GBM simulations with percentile summaries
+- Bridgewater-style Analysis — covariance and risk-parity utilities for correlated simulations
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
-- **Framework**: React Native with Expo
-- **Language**: JavaScript (ES6+)
-- **Navigation**: React Navigation (Stack + Bottom Tabs)
-- **UI Library**: React Native Paper
-- **Backend**: Firebase (Auth + Firestore)
-- **State Management**: React Context API
-- **Charts / SVG**: react-native-svg (used for custom Monte Carlo plots)
-- **Charts**: React Native Chart Kit
-- **API Integration**: Axios + Yahoo Finance API
-- **Local Simulation Engine**: Pure-JS Monte Carlo service (services/simulations/monteCarlo.js)
+- Framework: React Native with Expo
+- Language: JavaScript (ES6+)
+- Navigation: React Navigation (Stack + Bottom Tabs)
+- UI Library: React Native Paper
+- Backend: Firebase (Auth + Firestore)
+- State Management: React Context API (split contexts for list vs holdings)
+- Charts / SVG: react-native-svg and react-native-chart-kit
+- API Integration: Axios + Yahoo Finance endpoints
+- Simulation Engine: Pure-JS Monte Carlo (services/simulations/monteCarlo.js) — offloaded via a worker shim in development
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 PortfolioIQ/
@@ -101,7 +100,7 @@ PortfolioIQ/
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -141,36 +140,37 @@ PortfolioIQ/
 
 ---
 
-## 📖 Developer Notes
+## Developer Notes
 
-- The Monte Carlo engine is implemented as a pure-JS service at `services/simulations/monteCarlo.js`. It supports correlated geometric Brownian motion (GBM) via a Cholesky decomposition of a covariance matrix produced by `shared/bridgewaterAnalysis.js`.
-- `src/components/MonteCarlo.js` consumes the service and renders percentile paths (P10/P50/P90), a small sample of ghost paths for visual context, and summary metrics such as probability of loss and average max drawdown. The component includes input sanitization to avoid NaN/invalid SVG coordinates.
-- `shared/bridgewaterAnalysis.js` now exposes covariance and returns matrices that can be used to drive correlated simulations and risk-parity weight calculations.
-- `src/components/AIInsights.js` includes fixes for the gauge visualization (prevents arc overflow when >50% and improves percent label spacing).
-- Rendering many simulated paths can be heavy on the JS/UI thread. The current approach samples a subset of paths for plotting; consider moving compute to a background worker or native module for larger runs.
+- The Monte Carlo service (`services/simulations/monteCarlo.js`) supports correlated GBM via covariance matrices from `shared/bridgewaterAnalysis.js`.
+- The app currently offloads heavy analytics work to a worker shim (`src/workers/analyticsWorker.js`) and defers heavy UI work via `InteractionManager`/idle scheduling.
+- Contexts are split: `PortfolioListContext` (portfolios & selection) and `HoldingsContext` (holdings listener, CRUD, price refresh). This reduces unnecessary re-renders and listener churn.
+- Background price refresh uses batched Firestore writes (`writeBatch`) to reduce round-trips and snapshot storms.
+- UI performance: memoized holding/portfolio cards, FlatList tuning, and deferred heavy computations are implemented; more memoization and lazy-loading remain planned.
 
----
-
-## 🚧 Future Enhancements
-
-- **Offload Simulation Compute** - Move heavy Monte Carlo runs to a background worker or native module to avoid UI blocking
-- **Percentile-band Rendering** - Replace full 1,000-path overlays with shaded P10–P90 bands + a small sampled set of paths for performance
-- **Unit Tests for Simulation** - Add deterministic, seedable tests for the Monte Carlo engine and compare against analytic expectations for small N
-- **UI Controls** - Expose controls for number of paths, horizon, correlated toggle, and weight source (current vs Bridgewater)
-- **Historical Backtesting** - Validate simulation parameters and interpretability against historical bootstraps
+If you plan to extend analytics or simulation features, prefer running large compute off the main thread (worker/native) and reduce plotted path counts to keep the UI responsive.
 
 ---
 
-## 🤝 Contributing
+## Future Enhancements
+
+- Complete worker offload for heavy analytics (replace shim with real worker)
+- Percentile-band rendering for charts (P10–P90 shading + sampled paths)
+- Add deterministic tests for simulation engine and analytics routines
+- Lazy-load chart libraries and memoize heavy components
+- Improve incremental sync and backfill tooling for `portfolio_history` data
+
+---
+
+## Contributing
 
 Contributions, issues, and feature requests are welcome. See CONTRIBUTING.md if present.
 
 ---
 
-## 📄 License
+## License
 
 MIT License - See LICENSE file for details
 
 ---
 
-**Happy Investing! 📈**

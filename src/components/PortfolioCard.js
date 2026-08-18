@@ -169,4 +169,21 @@ const styles = StyleSheet.create({
   },
 });
 
-export default PortfolioCard;
+const portfolioAreEqual = (prevProps, nextProps) => {
+  const p = prevProps.portfolio || {};
+  const n = nextProps.portfolio || {};
+  const prevHoldings = prevProps.holdings || [];
+  const nextHoldings = nextProps.holdings || [];
+  // Compare portfolio identity and simple holdings snapshot
+  if (p.id !== n.id) return false;
+  if (p.name !== n.name) return false;
+  if (prevHoldings.length !== nextHoldings.length) return false;
+  // If lengths equal, check first/last updated markers to detect changes cheaply
+  const prevFirst = prevHoldings[0]?.lastUpdated || prevHoldings[0]?.updatedAt || '';
+  const nextFirst = nextHoldings[0]?.lastUpdated || nextHoldings[0]?.updatedAt || '';
+  const prevLast = prevHoldings[prevHoldings.length - 1]?.lastUpdated || prevHoldings[prevHoldings.length - 1]?.updatedAt || '';
+  const nextLast = nextHoldings[nextHoldings.length - 1]?.lastUpdated || nextHoldings[nextHoldings.length - 1]?.updatedAt || '';
+  return prevFirst === nextFirst && prevLast === nextLast;
+};
+
+export default React.memo(PortfolioCard, portfolioAreEqual);

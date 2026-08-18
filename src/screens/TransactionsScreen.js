@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, FlatList, Alert } from 'react-native';
 import { Text, FAB, Dialog, Portal, Button, TextInput, List } from 'react-native-paper';
-import { getPortfolioTransactions, addTransaction, deleteTransaction } from '../services/firebase';
+import { getPortfolioTransactions, addTransaction, deleteTransaction } from '../../services/firebase/firebase';
 import { useContext } from 'react';
 import { PortfolioContext } from '../context/PortfolioContext';
 import { COLORS, Spacing } from '../../shared/colors';

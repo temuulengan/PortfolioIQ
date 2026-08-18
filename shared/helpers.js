@@ -225,6 +225,48 @@ export const averageBy = (array, key) => {
 };
 
 /**
+ * Map over items with a bounded number of concurrent async calls.
+ *
+ * Sequential `for (const x of xs) await f(x)` over network calls turns an
+ * N-row import into N round trips end to end; unbounded Promise.all hammers the
+ * API and gets rate limited. This keeps a fixed number in flight and preserves
+ * input order in the results.
+ */
+export const mapWithConcurrency = async (items, mapper, concurrency = 6) => {
+  const list = Array.isArray(items) ? items : [];
+  const results = new Array(list.length);
+  let cursor = 0;
+
+  const worker = async () => {
+    while (cursor < list.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await mapper(list[index], index);
+    }
+  };
+
+  const size = Math.max(1, Math.min(concurrency, list.length));
+  await Promise.all(Array.from({ length: size }, worker));
+  return results;
+};
+
+/**
+ * Stable identity for a set of holdings, for use as a React effect dependency.
+ *
+ * Firestore snapshots hand back a fresh array on every update, so depending on
+ * the array itself re-runs expensive work (historical price downloads, risk
+ * analysis) on every price tick. This signature only changes when the positions
+ * themselves change.
+ */
+export const holdingsSignature = (holdings) => {
+  if (!Array.isArray(holdings) || holdings.length === 0) return '';
+  return holdings
+    .map((h) => `${h?.symbol || ''}:${h?.quantity ?? ''}`)
+    .sort()
+    .join('|');
+};
+
+/**
  * Debounce function
  */
 export const debounce = (func, wait) => {

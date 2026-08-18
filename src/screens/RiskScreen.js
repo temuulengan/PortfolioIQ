@@ -1,5 +1,5 @@
-import React, { useContext, useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import React, { useContext, useEffect, useState, useMemo } from 'react';
+import { View, StyleSheet, ScrollView, InteractionManager } from 'react-native';
 import { Text, Card, Title, Surface, ProgressBar, Chip, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { PortfolioContext } from '../context/PortfolioContext';
@@ -12,10 +12,14 @@ import {
 } from '../../shared/calculations';
 import { runBridgewaterAnalysis } from '../../shared/bridgewaterAnalysis';
 import { RISK_THRESHOLDS, DIVERSIFICATION } from '../../shared/constants';
+import { holdingsSignature } from '../../shared/helpers';
 import { COLORS, getRiskLevelColor } from '../../shared/colors';
 
 const RiskScreen = () => {
   const { holdings, selectedPortfolio } = useContext(PortfolioContext);
+  // Bridgewater analysis downloads a year of prices per symbol — key it on the
+  // positions, not on the snapshot array identity.
+  const positionsKey = useMemo(() => holdingsSignature(holdings), [holdings]);
   const [bridgewaterResult, setBridgewaterResult] = useState(null);
   const [bridgewaterLoading, setBridgewaterLoading] = useState(false);
   const [bridgewaterError, setBridgewaterError] = useState(null);
@@ -48,8 +52,19 @@ const RiskScreen = () => {
       }
     };
 
-    analyzeBridgewater();
-  }, [selectedPortfolio?.id, holdings]);
+    // Defer heavy analysis until after navigation/animations finish
+    const task = InteractionManager.runAfterInteractions(() => {
+      analyzeBridgewater();
+    });
+
+    return () => task?.cancel?.();
+  }, [selectedPortfolio?.id, positionsKey]);
+
+  const beta = useMemo(() => calculatePortfolioBeta(holdings), [holdings]);
+  const volatility = useMemo(() => calculateVolatility(holdings), [holdings]);
+  const concentrationRisk = useMemo(() => calculateConcentrationRisk(holdings), [holdings]);
+  const diversificationScore = useMemo(() => calculateDiversificationScore(holdings), [holdings]);
+  const isWellDiversified = useMemo(() => isDiversified(holdings), [holdings]);
 
   if (!selectedPortfolio || holdings.length === 0) {
     return (
@@ -63,11 +78,6 @@ const RiskScreen = () => {
     );
   }
 
-  const beta = calculatePortfolioBeta(holdings);
-  const volatility = calculateVolatility(holdings);
-  const concentrationRisk = calculateConcentrationRisk(holdings);
-  const diversificationScore = calculateDiversificationScore(holdings);
-  const isWellDiversified = isDiversified(holdings);
 
   const getBetaRiskLevel = (beta) => {
     if (beta < RISK_THRESHOLDS.LOW_BETA) return { level: 'Low', color: COLORS.success };
@@ -203,8 +213,11 @@ const RiskScreen = () => {
               <Title style={styles.cardTitle}>Portfolio Beta</Title>
             </View>
             <Chip
-              style={[styles.riskChip, { backgroundColor: betaRisk.color + '20' }]}
-              textStyle={{ color: betaRisk.color, fontWeight: '600' }}
+              style={[
+                styles.riskChip,
+                { backgroundColor: (betaRisk?.color ?? COLORS.primary) + '20' },
+              ]}
+              textStyle={{ color: betaRisk?.color ?? COLORS.primary, fontWeight: '600' }}
             >
               {betaRisk.level} Risk
             </Chip>
@@ -238,8 +251,11 @@ const RiskScreen = () => {
               <Title style={styles.cardTitle}>Volatility</Title>
             </View>
             <Chip
-              style={[styles.riskChip, { backgroundColor: volatilityRisk.color + '20' }]}
-              textStyle={{ color: volatilityRisk.color, fontWeight: '600' }}
+              style={[
+                styles.riskChip,
+                { backgroundColor: (volatilityRisk?.color ?? COLORS.primary) + '20' },
+              ]}
+              textStyle={{ color: volatilityRisk?.color ?? COLORS.primary, fontWeight: '600' }}
             >
               {volatilityRisk.level} Risk
             </Chip>
@@ -269,9 +285,9 @@ const RiskScreen = () => {
             <Chip
               style={[
                 styles.riskChip,
-                { backgroundColor: concentrationRiskLevel.color + '20' },
+                { backgroundColor: (concentrationRiskLevel?.color ?? COLORS.primary) + '20' },
               ]}
-              textStyle={{ color: concentrationRiskLevel.color, fontWeight: '600' }}
+              textStyle={{ color: concentrationRiskLevel?.color ?? COLORS.primary, fontWeight: '600' }}
             >
               {concentrationRiskLevel.level} Risk
             </Chip>
@@ -305,8 +321,11 @@ const RiskScreen = () => {
               <Title style={styles.cardTitle}>Diversification Score</Title>
             </View>
             <Chip
-              style={[styles.riskChip, { backgroundColor: diversificationColor + '20' }]}
-              textStyle={{ color: diversificationColor, fontWeight: '600' }}
+              style={[
+                styles.riskChip,
+                { backgroundColor: (diversificationColor ?? COLORS.primary) + '20' },
+              ]}
+              textStyle={{ color: diversificationColor ?? COLORS.primary, fontWeight: '600' }}
             >
               {diversificationScore >= 60 ? 'Good' : 'Needs Work'}
             </Chip>

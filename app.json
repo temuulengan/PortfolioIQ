@@ -16,7 +16,10 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.portfolioiq.app"
+      "bundleIdentifier": "com.portfolioiq.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -35,15 +38,7 @@
       }
     },
     "plugins": [
-      "expo-font",
-      [
-        "@sentry/react-native/expo",
-        {
-          "url": "https://sentry.io/",
-          "project": "react-native",
-          "organization": "temuulenn"
-        }
-      ]
+      "expo-font"
     ]
   }
 }

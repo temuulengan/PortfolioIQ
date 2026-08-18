@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
   View,
   StyleSheet,
@@ -20,36 +20,21 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { COLORS, Shadow } from '../../shared/colors';
 import { formatRelativeTime } from '../../shared/helpers';
 import NotificationService from '../../services/notifications/notificationService';
+import { NotificationContext } from '../context/NotificationContext';
 
 const NotificationsScreen = ({ navigation }) => {
-  const [notifications, setNotifications] = useState([]);
+  // The context mirrors storage and re-reads on every service mutation, so this
+  // screen never keeps its own copy of the list.
+  const { notifications, markAllAsRead } = useContext(NotificationContext);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadNotifications();
-    
-    // Mark all as read when screen is opened
-    const markRead = async () => {
-      await NotificationService.markAllAsRead();
-    };
-    markRead();
-  }, []);
-
-  const loadNotifications = async () => {
-    try {
-      setLoading(true);
-      const data = await NotificationService.getAllNotifications();
-      setNotifications(data);
-    } catch (error) {
-      console.error('Error loading notifications:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    // Mark all as read when the screen is opened
+    markAllAsRead().finally(() => setLoading(false));
+  }, [markAllAsRead]);
 
   const handleDelete = async (notificationId) => {
     await NotificationService.deleteNotification(notificationId);
-    setNotifications(notifications.filter(n => n.id !== notificationId));
   };
 
   const handleClearAll = () => {
@@ -63,7 +48,6 @@ const NotificationsScreen = ({ navigation }) => {
           style: 'destructive',
           onPress: async () => {
             await NotificationService.clearAllNotifications();
-            setNotifications([]);
           },
         },
       ]

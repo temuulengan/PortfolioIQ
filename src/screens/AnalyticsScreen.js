@@ -1,11 +1,11 @@
-import React, { useContext, useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Dimensions } from 'react-native';
+import React, { useContext, useState, useEffect, useMemo, useRef } from 'react';
+import { View, StyleSheet, ScrollView, Dimensions, InteractionManager } from 'react-native';
 import { Text, Card, Title, Chip, Surface, SegmentedButtons, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LineChart, PieChart } from 'react-native-chart-kit';
 import { PortfolioContext } from '../context/PortfolioContext';
 import { AuthContext } from '../context/AuthContext';
-import { formatCurrency, formatPercent } from '../../shared/helpers';
+import { formatCurrency, formatPercent, holdingsSignature } from '../../shared/helpers';
 import {
   calculatePortfolioValue,
   calculateAllocation,
@@ -18,6 +18,15 @@ import { getPortfolioHistory, generateHistoricalData } from '../../services/hist
 import { CHART_COLORS } from '../../shared/constants';
 import { COLORS, getGainLossColor } from '../../shared/colors';
 
+const chartConfig = {
+  backgroundGradientFrom: '#FFFFFF',
+  backgroundGradientTo: '#FFFFFF',
+  color: (opacity = 1) => `rgba(98, 0, 238, ${opacity})`,
+  strokeWidth: 2,
+  barPercentage: 0.5,
+  useShadowColorFromDataset: false,
+};
+
 const AnalyticsScreen = () => {
   const { holdings, selectedPortfolio } = useContext(PortfolioContext);
   const { user } = useContext(AuthContext);
@@ -28,16 +37,24 @@ const AnalyticsScreen = () => {
 
   const screenWidth = Dimensions.get('window').width;
 
-  const totalValue = calculatePortfolioValue(holdings);
-  const allocations = calculateAllocation(holdings);
-  const assetTypeAllocations = calculateAssetTypeAllocation(holdings);
-  const topPerformers = getTopPerformers(holdings, 5);
-  const bottomPerformers = getBottomPerformers(holdings, 5);
+  // generateHistoricalData issues one Yahoo request per symbol; keying the effect
+  // on the positions stops it firing again on every price refresh.
+  const positionsKey = useMemo(() => holdingsSignature(holdings), [holdings]);
+  const holdingsRef = useRef(holdings);
+  useEffect(() => { holdingsRef.current = holdings; }, [holdings]);
+
+  const totalValue = useMemo(() => calculatePortfolioValue(holdings), [holdings]);
+  const allocations = useMemo(() => calculateAllocation(holdings), [holdings]);
+  const assetTypeAllocations = useMemo(() => calculateAssetTypeAllocation(holdings), [holdings]);
+  const topPerformers = useMemo(() => getTopPerformers(holdings, 5), [holdings]);
+  const bottomPerformers = useMemo(() => getBottomPerformers(holdings, 5), [holdings]);
 
   // Load historical data when portfolio or time range changes
   useEffect(() => {
-    if (!selectedPortfolio) return;
-    
+    if (!selectedPortfolio) return undefined;
+
+    let cancelled = false;
+
     const loadHistoricalData = async () => {
       try {
         setLoadingHistory(true);
@@ -55,23 +72,31 @@ const AnalyticsScreen = () => {
         
         // Try to get existing historical data
         let history = await getPortfolioHistory(selectedPortfolio.id, days);
-        
+
         // If no history exists, generate from current holdings
-        if (history.length === 0 && holdings && holdings.length > 0) {
-          history = await generateHistoricalData(holdings, days);
+        const current = holdingsRef.current;
+        if (history.length === 0 && current && current.length > 0) {
+          history = await generateHistoricalData(current, days);
         }
-        
-        setHistoricalData(history);
+
+        if (!cancelled) setHistoricalData(history);
       } catch (error) {
         console.error('Error loading historical data:', error);
-        setHistoryError(error.message);
+        if (!cancelled) setHistoryError(error.message);
       } finally {
-        setLoadingHistory(false);
+        if (!cancelled) setLoadingHistory(false);
       }
     };
-    
-    loadHistoricalData();
-  }, [selectedPortfolio, timeRange, holdings]);
+
+    const task = InteractionManager.runAfterInteractions(() => {
+      loadHistoricalData();
+    });
+
+    return () => {
+      cancelled = true;
+      task?.cancel?.();
+    };
+  }, [selectedPortfolio?.id, timeRange, positionsKey]);
 
   // Prepare line chart data from historical data
   const prepareLineChartData = () => {
@@ -115,7 +140,12 @@ const AnalyticsScreen = () => {
     };
   };
 
-  const lineChartData = prepareLineChartData();
+  // Rebuilt only when the underlying series changes, not on every render.
+  const lineChartData = useMemo(
+    () => prepareLineChartData(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [historicalData, loadingHistory, totalValue]
+  );
   // Prepare pie chart data for holdings allocation
   const holdingsPieData = allocations.slice(0, 5).map((item, index) => ({
     name: item.symbol,
@@ -134,14 +164,6 @@ const AnalyticsScreen = () => {
     legendFontSize: 12,
   }));
 
-  const chartConfig = {
-    backgroundGradientFrom: '#FFFFFF',
-    backgroundGradientTo: '#FFFFFF',
-    color: (opacity = 1) => `rgba(98, 0, 238, ${opacity})`,
-    strokeWidth: 2,
-    barPercentage: 0.5,
-    useShadowColorFromDataset: false,
-  };
 
   if (!selectedPortfolio || holdings.length === 0) {
     return (

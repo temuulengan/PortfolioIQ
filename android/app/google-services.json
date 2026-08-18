@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "922920278238",
+    "project_id": "portfolioiq-11",
+    "storage_bucket": "portfolioiq-11.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:922920278238:android:053272aea8ac9470f20a4f",
+        "android_client_info": {
+          "package_name": "com.portfolioiq.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "922920278238-50is72ltc4sfieqah03tj7t7tdb37o0i.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCwU7GBuroZj0XefC9bUztzG1fY816jeoc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "922920278238-50is72ltc4sfieqah03tj7t7tdb37o0i.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "922920278238-d07qulpiujhofk8opujhgjfp9ujq5bqh.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "PortfolioIQ"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -10,15 +10,17 @@ import useFileUploadPipeline from '../hooks/useFileUploadPipeline';
 
 import { runBridgewaterAnalysis } from '../../shared/bridgewaterAnalysis';
 import { runMonteCarloAsync } from '../../services/simulations/monteCarlo';
-import { addHolding } from '../../services/firebase/firebase';
+import { addHoldingsBatch } from '../../services/firebase/firebase';
 import { useContext } from 'react';
 import { PortfolioContext } from '../context/PortfolioContext';
+import { AuthContext } from '../context/AuthContext';
 import { COLORS } from '../../shared/colors';
 
 const FileUploadScreen = () => {
   const navigation = useNavigation();
   const { file, selectFile, parse, parsedRows, parseErrors, reconcile, report, resolveAndRun, resolvedHoldings, loading } = useFileUploadPipeline();
   const { selectPortfolio, createNewPortfolio, loadPortfolios, loadHoldings } = useContext(PortfolioContext);
+  const { user } = useContext(AuthContext);
   const [overrides, setOverrides] = useState({});
   const [excluded, setExcluded] = useState([]);
   const [step, setStep] = useState(1); // 1=upload,2=review,3=complete
@@ -31,9 +33,9 @@ const FileUploadScreen = () => {
   const doParse = async () => {
     setLoadingMessage('Parsing file...');
     try {
-      await parse();
+      const { rows } = await parse();
       setLoadingMessage('Reconciling holdings...');
-      await reconcile();
+      await reconcile(rows);
       // advance to review step
       setPortfolioName((file && file.name) ? file.name.replace(/\.[^/.]+$/, '') : `Imported ${new Date().toISOString()}`);
       setStep(2);
@@ -68,21 +70,27 @@ const FileUploadScreen = () => {
       const res = await createNewPortfolio(portfolioData);
       if (res && res.success) {
         createdPortfolio = res.portfolio;
-        // add holdings
-        await Promise.all(final.map(async (h) => {
-          try {
-            await addHolding(createdPortfolio.id, {
-                symbol: h.symbol,
-                quantity: h.quantity || 0,
-                currentPrice: h.currentPrice || 0,
-                purchasePrice: h.avgCost ?? h.purchasePrice ?? null,
-                raw: h.raw || null,
-                lastUpdated: new Date().toISOString(),
-              });
-          } catch (err) {
-            console.error('Failed to add holding during import for', h.symbol, err.message || err);
-          }
-        }));
+        // Import as one batched write rather than N independent round trips
+        const importedAt = new Date().toISOString();
+        try {
+          await addHoldingsBatch(
+            createdPortfolio.id,
+            final.map((h) => ({
+              symbol: h.symbol,
+              name: h.name || null,
+              quantity: h.quantity || 0,
+              currentPrice: h.currentPrice || 0,
+              purchasePrice: h.avgCost ?? h.purchasePrice ?? null,
+              assetType: 'stock',
+              raw: h.raw || null,
+              lastUpdated: importedAt,
+            })),
+            user?.uid
+          );
+        } catch (err) {
+          console.error('Failed to import holdings:', err.message || err);
+          throw err;
+        }
 
         // refresh portfolios and select the new portfolio so Dashboard/Portfolios reflect it
         try {
@@ -90,15 +98,15 @@ const FileUploadScreen = () => {
         } catch (e) {
           // ignore load errors
         }
-        // Ensure holdings are loaded from Firestore for the created portfolio before selecting
+        // Select the new portfolio first (increments fetch id and clears stale state),
+        // then explicitly load holdings once to avoid concurrent/duplicate loads that
+        // can cause the 'stale fetch result discarded' behavior.
+        selectPortfolio(createdPortfolio);
         try {
           await loadHoldings(createdPortfolio.id);
         } catch (e) {
-          // if loadHoldings fails, fall back to selecting anyway
+          // if loadHoldings fails, continue — UI will handle loading state
         }
-        // wait for holdings to be loaded and then select
-        try { await loadHoldings(createdPortfolio.id); } catch (e) {}
-        selectPortfolio(createdPortfolio);
         // show success step
         setSuccessInfo({ portfolio: createdPortfolio, count: final.length });
         setStep(3);
@@ -113,18 +121,27 @@ const FileUploadScreen = () => {
     }
     // map final holdings to runBridgewater and monteCarlo inputs (optional background tasks)
     const bwHoldings = final.map(h => ({ symbol: h.symbol, quantity: h.quantity || 0, currentPrice: h.currentPrice || 0 }));
-    (async () => {
-      try {
-        await runBridgewaterAnalysis(bwHoldings, { lookbackDays: 252 });
-      } catch (e) { console.error('Background Bridgewater analysis failed', e); }
-    })();
-    // monte carlo in background
-    (async () => {
-      try {
-        const mcAssets = final.map(h => ({ S0: h.currentPrice || 0, quantity: h.quantity || 0, ticker: h.symbol }));
-        await runMonteCarloAsync({ assets: mcAssets, N: 2000, steps: 252, sampleCount: 25 });
-      } catch (e) { console.error('Background Monte Carlo failed', e); }
-    })();
+    const runBackgroundAnalyses = () => {
+      (async () => {
+        try {
+          await runBridgewaterAnalysis(bwHoldings, { lookbackDays: 252 });
+        } catch (e) { console.error('Background Bridgewater analysis failed', e); }
+      })();
+      // monte carlo in background
+      (async () => {
+        try {
+          const mcAssets = final.map(h => ({ S0: h.currentPrice || 0, quantity: h.quantity || 0, ticker: h.symbol }));
+          await runMonteCarloAsync({ assets: mcAssets, N: 2000, steps: 252, sampleCount: 25 });
+        } catch (e) { console.error('Background Monte Carlo failed', e); }
+      })();
+    };
+    try {
+      const { InteractionManager } = require('react-native');
+      InteractionManager.runAfterInteractions(runBackgroundAnalyses);
+    } catch (e) {
+      // fallback
+      runBackgroundAnalyses();
+    }
   };
 
   return (

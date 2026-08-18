@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { Searchbar, List, Text, ActivityIndicator, HelperText } from 'react-native-paper';
 import { searchStocks } from '../../services/api/stockAPI';
-import { debounce } from '../../shared/helpers';
+
+const SEARCH_DEBOUNCE_MS = 400;
 
 const StockSearchBar = ({ onSelectStock, placeholder = 'Search stocks...' }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -11,34 +12,52 @@ const StockSearchBar = ({ onSelectStock, placeholder = 'Search stocks...' }) => 
   const [showResults, setShowResults] = useState(false);
   const [searchError, setSearchError] = useState(null);
 
-  const handleSearch = debounce(async (query) => {
-    if (query.length < 1) {
-      setSearchResults([]);
-      setShowResults(false);
-      return;
-    }
+  // A debounced function built during render is a *new* function on every
+  // keystroke, so its timer never gets a chance to cancel the previous one.
+  // Keep one timer for the component's lifetime instead.
+  const timerRef = useRef(null);
+  // Responses can arrive out of order; only the newest request may write state.
+  const requestIdRef = useRef(0);
 
+  useEffect(() => () => clearTimeout(timerRef.current), []);
+
+  const runSearch = useCallback(async (query) => {
+    const requestId = ++requestIdRef.current;
     try {
       setLoading(true);
       const results = await searchStocks(query);
+      if (requestId !== requestIdRef.current) return; // superseded
       setSearchResults(results);
       setSearchError(null);
       setShowResults(true);
     } catch (error) {
+      if (requestId !== requestIdRef.current) return;
       console.error('Search error:', error);
       setSearchResults([]);
       setSearchError(error?.message || 'Search failed');
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
-  }, 500);
+  }, []);
 
   const onChangeSearch = (query) => {
     setSearchQuery(query);
-    handleSearch(query);
+    clearTimeout(timerRef.current);
+
+    if (query.trim().length < 1) {
+      requestIdRef.current += 1; // discard any in-flight response
+      setSearchResults([]);
+      setShowResults(false);
+      setLoading(false);
+      return;
+    }
+
+    timerRef.current = setTimeout(() => runSearch(query.trim()), SEARCH_DEBOUNCE_MS);
   };
 
   const handleSelectStock = (stock) => {
+    clearTimeout(timerRef.current);
+    requestIdRef.current += 1;
     setSearchQuery('');
     setSearchResults([]);
     setShowResults(false);

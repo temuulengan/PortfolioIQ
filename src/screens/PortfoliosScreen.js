@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState, useCallback } from 'react';
+import React, { useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -26,6 +26,7 @@ import { PortfolioContext } from '../context/PortfolioContext';
 import { formatCurrency, formatPercent } from '../../shared/helpers';
 import { COLORS, getGainLossColor } from '../../shared/colors';
 import { getPortfolioHoldings } from '../../services/firebase/firebase';
+import { AuthContext } from '../context/AuthContext';
 import {
   calculatePortfolioValue,
   calculatePortfolioCostBasis,
@@ -55,35 +56,49 @@ const PortfoliosScreen = ({ navigation }) => {
   const [errors, setErrors] = useState({});
   const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  // dialog owns the typed input; parent does not need to track it
-  // kept state: deleteError to surface errors returned from delete operation
   const [deleteError, setDeleteError] = useState(null);
   const [portfolioHoldingsMap, setPortfolioHoldingsMap] = useState({});
+
+  const { user, loading: authLoading } = useContext(AuthContext);
+
+  // One Firestore query per portfolio runs below; key it on the portfolio ids
+  // so a new array identity for the same portfolios does not refetch them all.
+  const portfolioIdsKey = useMemo(
+    () => (portfolios || []).map((p) => p.id).join('|'),
+    [portfolios]
+  );
 
   useEffect(() => {
     let isMounted = true;
 
     const loadAllPortfolioHoldings = async () => {
+      if (authLoading) return;
+      if (!user) {
+        if (isMounted) setPortfolioHoldingsMap({});
+        return;
+      }
+
       if (portfolios.length === 0) {
-        if (isMounted) {
-          setPortfolioHoldingsMap({});
-        }
+        if (isMounted) setPortfolioHoldingsMap({});
         return;
       }
 
       try {
         const results = await Promise.all(
           portfolios.map(async (portfolio) => {
-            const portfolioHoldings = await getPortfolioHoldings(portfolio.id);
-            return [portfolio.id, portfolioHoldings];
+            try {
+              const portfolioHoldings = await getPortfolioHoldings(portfolio.id, user.uid);
+              return [portfolio.id, portfolioHoldings];
+            } catch (err) {
+              console.warn('Skipping holdings fetch for portfolio due to error:', err && err.message ? err.message : err);
+              return [portfolio.id, []];
+            }
           })
         );
 
-        if (isMounted) {
-          setPortfolioHoldingsMap(Object.fromEntries(results));
-        }
+        if (isMounted) setPortfolioHoldingsMap(Object.fromEntries(results));
       } catch (error) {
-        console.error('Error loading portfolio holdings summaries:', error);
+        console.error('Error loading portfolio holdings summaries:', error && error.message ? error.message : error);
       }
     };
 
@@ -92,7 +107,7 @@ const PortfoliosScreen = ({ navigation }) => {
     return () => {
       isMounted = false;
     };
-  }, [portfolios]);
+  }, [portfolioIdsKey, user, authLoading]);
 
   useEffect(() => {
     if (!selectedPortfolio?.id) return;
@@ -181,12 +196,14 @@ const PortfoliosScreen = ({ navigation }) => {
   }, [deleteTarget, deleteExistingPortfolio]);
 
   const handleDeletePortfolio = useCallback((portfolio) => {
-    // Show a stronger confirmation dialog requiring the user to type the portfolio name
     setMenuVisible(null);
     setDeleteTarget(portfolio);
     setDeleteError(null);
     setDeleteDialogVisible(true);
   }, []);
+
+  // ✅ FIXED: moved here, above any early return
+  const handleDismissDelete = useCallback(() => setDeleteDialogVisible(false), []);
 
   const handleSelectPortfolio = (portfolio) => {
     selectPortfolio(portfolio);
@@ -316,7 +333,6 @@ const PortfoliosScreen = ({ navigation }) => {
         size={80}
         color={COLORS.surfaceVariant}
       />
-      
       <Text style={styles.emptyTitle}>No Portfolios</Text>
       <Text style={styles.emptyText}>
         Create your first portfolio to start tracking investments
@@ -324,6 +340,7 @@ const PortfoliosScreen = ({ navigation }) => {
     </View>
   );
 
+  // ✅ Early return is now AFTER all hooks
   if (loading && portfolios.length === 0) {
     return (
       <View style={styles.loadingContainer}>
@@ -332,9 +349,6 @@ const PortfoliosScreen = ({ navigation }) => {
       </View>
     );
   }
-
-    // Delete confirmation dialog (type-to-confirm) — render directly with stable callbacks
-    const handleDismissDelete = useCallback(() => setDeleteDialogVisible(false), []);
 
   return (
     <View style={styles.container}>
@@ -361,6 +375,10 @@ const PortfoliosScreen = ({ navigation }) => {
         renderItem={renderPortfolioCard}
         keyExtractor={(item) => item.id}
         ListEmptyComponent={renderEmpty}
+        initialNumToRender={8}
+        maxToRenderPerBatch={8}
+        windowSize={5}
+        removeClippedSubviews={true}
         contentContainerStyle={
           portfolios.length === 0 ? styles.emptyListContent : styles.listContent
         }

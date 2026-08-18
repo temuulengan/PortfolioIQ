@@ -40,13 +40,11 @@ const DashboardScreen = ({ navigation }) => {
     refreshPrices,
   } = useContext(PortfolioContext);
   const { unreadCount } = useContext(NotificationContext);
-  useEffect(() => {
-    loadPortfolios();
-  }, [loadPortfolios]);
-  
+
   // Check for milestones when total value changes (only when holdings finished loading)
-  const totalValue = isLoadingHoldings ? null : calculatePortfolioValue(holdings);
   const previousTotalRef = React.useRef(null);
+
+  const totalValue = useMemo(() => (isLoadingHoldings ? 0 : calculatePortfolioValue(holdings)), [holdings, isLoadingHoldings]);
   useEffect(() => {
     if (!isLoadingHoldings && Number.isFinite(totalValue) && previousTotalRef.current !== null && previousTotalRef.current !== totalValue) {
       checkMilestones(totalValue, previousTotalRef.current);
@@ -58,13 +56,10 @@ const DashboardScreen = ({ navigation }) => {
     await Promise.all([loadPortfolios(), refreshPrices()]);
   };
 
-  const costBasis = isLoadingHoldings ? null : calculatePortfolioCostBasis(holdings);
-  const gainLoss = isLoadingHoldings ? null : calculatePortfolioGainLoss(holdings);
-  const gainLossPercent = (!isLoadingHoldings && holdings.length > 0)
-    ? calculatePortfolioGainLossPercent(holdings)
-    : null;
-  const isPositive = !isLoadingHoldings && gainLoss >= 0;
-
+  const costBasis = useMemo(() => (isLoadingHoldings ? 0 : calculatePortfolioCostBasis(holdings)), [holdings, isLoadingHoldings]);
+  const gainLoss = useMemo(() => (isLoadingHoldings ? 0 : calculatePortfolioGainLoss(holdings)), [holdings, isLoadingHoldings]);
+  const gainLossPercent = useMemo(() => (!isLoadingHoldings && holdings.length > 0 ? calculatePortfolioGainLossPercent(holdings) : null), [holdings, isLoadingHoldings]);
+  const isPositive = gainLoss >= 0;
   const topPerformers = useMemo(() => (!isLoadingHoldings ? getTopPerformers(holdings, 3) : []), [holdings, isLoadingHoldings]);
   const allocations = useMemo(() => (!isLoadingHoldings ? calculateAllocation(holdings).slice(0, 5) : []), [holdings, isLoadingHoldings]);
 
@@ -274,6 +269,7 @@ const DashboardScreen = ({ navigation }) => {
                 <Text style={styles.actionText}>Portfolios</Text>
               </TouchableOpacity>
             </View>
+            {/* debug FAB removed */}
           </>
         ) : (
           <View style={styles.emptyContainer}>

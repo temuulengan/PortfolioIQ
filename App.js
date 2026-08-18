@@ -1,7 +1,4 @@
-// Ensure InteractionManager shim is applied as early as possible to avoid
-// RN deprecation warnings and to schedule long tasks via requestIdleCallback.
-import './src/utils/interactionShim';
-import React, { use, useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { LogBox } from 'react-native';
 import { Provider as PaperProvider } from 'react-native-paper';
@@ -10,9 +7,9 @@ import { AuthProvider } from './src/context/AuthContext';
 import { PortfolioProvider } from './src/context/PortfolioContext';
 import { NotificationProvider } from './src/context/NotificationContext';
 import AppNavigator from './src/navigation/AppNavigator';
+import ErrorBoundary from './src/components/ErrorBoundary';
 import { theme } from './shared/theme';
 import * as SplashScreen from 'expo-splash-screen';
-import { getAuth } from 'firebase/auth';
 import { View } from 'react-native';
 
 // Ignore VirtualizedList warning
@@ -22,14 +19,6 @@ const MIN_SPLASH_MS = 800; // minimum time to keep the native splash visible
 
 export default function App() {
   const [appIsReady, setAppIsReady] = useState(false);
-
-  useEffect(() => {
-    const auth = getAuth();
-    const user = auth.currentUser;
-    console.log('=== AUTH CHECK ===');
-    console.log('currentUser:', user);
-    console.log('uid:', user?.uid);
-  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -46,11 +35,7 @@ export default function App() {
 
         const elapsed = Date.now() - start;
         if (elapsed < MIN_SPLASH_MS) {
-          const wait = MIN_SPLASH_MS - elapsed;
-          console.log(`Splash: prepared in ${elapsed}ms, waiting ${wait}ms`);
-          await new Promise((r) => setTimeout(r, wait));
-        } else {
-          console.log(`Splash: prepared in ${elapsed}ms`);
+          await new Promise((r) => setTimeout(r, MIN_SPLASH_MS - elapsed));
         }
       } catch (e) {
         console.warn(e);
@@ -68,7 +53,6 @@ export default function App() {
     if (appIsReady) {
       // Hide the splash screen once the root view has been laid out
       try {
-        console.log('Splash: hiding now');
         await SplashScreen.hideAsync();
       } catch (e) {
         console.warn('Splash hide failed', e);
@@ -83,6 +67,8 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
+      {/* Outside the providers: if one of them throws, the fallback must still render. */}
+      <ErrorBoundary>
       <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
       <PaperProvider theme={theme}>
         <AuthProvider>
@@ -95,6 +81,7 @@ export default function App() {
         </AuthProvider>
       </PaperProvider>
       </View>
+      </ErrorBoundary>
     </SafeAreaProvider>
   );
 }
